@@ -1,11 +1,12 @@
-import { createContext, Dispatch, SetStateAction, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import {
   applyCompletedMatchSuspensions,
   buildMatchStatistics,
   buildUniqueAuthEmail,
-  canManageMatchControls,
   canRegisterTeamToTournament,
   sanitizeDisciplinePatch,
+  sanitizeMatchEventPayload,
 } from '../lib/leaguehub-data'
 import { subscribeToLeaguehubRealtime, supabase } from '../lib/supabase'
 import type {
@@ -39,6 +40,8 @@ const EMPTY_APP_STATE: AppState = {
   tournamentApplications: [],
   disciplineRecords: [],
 }
+
+const usersSelectColumns = 'id, name, full_name, email, username, password, role, team_id, permissions, phone, tc, is_active, kvkk_accepted, created_at'
 
 const defaultPermissions: PermissionSet = {
   fikstur: true,
@@ -105,31 +108,6 @@ const isSchemaMismatchError = (error: { code?: string; message?: string; details
 
   const messageText = `${error.message ?? ''} ${error.details ?? ''} ${error.code ?? ''}`.toLowerCase()
   return /bad request|column .* does not exist|no such column|42703|42p01|42501|invalid input|unsupported column|property .* does not exist/i.test(messageText)
-}
-
-const readLocalFallbackState = (): AppState | null => {
-  try {
-    const raw = localStorage.getItem(LOCAL_FALLBACK_STATE_KEY)
-    if (!raw) return null
-    const value = JSON.parse(raw) as Partial<AppState>
-    if (!value || typeof value !== 'object') return null
-    return {
-      ...EMPTY_APP_STATE,
-      ...value,
-      users: Array.isArray(value.users) ? value.users : [],
-      teams: Array.isArray(value.teams) ? value.teams : [],
-      tournaments: Array.isArray(value.tournaments) ? value.tournaments : [],
-      matches: Array.isArray(value.matches) ? value.matches : [],
-      announcements: Array.isArray(value.announcements) ? value.announcements : [],
-      gallery: Array.isArray(value.gallery) ? value.gallery : [],
-      messages: Array.isArray(value.messages) ? value.messages : [],
-      passwordResetRequests: Array.isArray(value.passwordResetRequests) ? value.passwordResetRequests : [],
-      tournamentApplications: Array.isArray(value.tournamentApplications) ? value.tournamentApplications : [],
-      disciplineRecords: Array.isArray(value.disciplineRecords) ? value.disciplineRecords : [],
-    }
-  } catch {
-    return null
-  }
 }
 
 const persistLocalFallbackState = (state: AppState) => {
@@ -1447,7 +1425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const writeResults = await Promise.all([
       userRows.length ? supabase.from('users').insert(userRows) : Promise.resolve({ error: null }),
       teamRows.length ? supabase.from('teams').insert(teamRows) : Promise.resolve({ error: null }),
-      Promise.resolve({ error: null }),
+      playerRows.length ? supabase.from('players').upsert(playerRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
       tournamentRows.length ? supabase.from('tournaments').upsert(tournamentRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
       fixtureRows.length ? supabase.from('fixtures').insert(fixtureRows) : Promise.resolve({ error: null }),
       matchRows.length ? supabase.from('matches').upsert(matchRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),

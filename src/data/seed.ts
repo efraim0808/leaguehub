@@ -260,4 +260,5 @@ export const buildInitialState = (): AppState => ({
       createdAt: '2026-08-29T12:00:00.000Z',
     },
   ],
+  disciplineRecords: [],
 })

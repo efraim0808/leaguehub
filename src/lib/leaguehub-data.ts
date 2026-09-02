@@ -847,6 +847,7 @@ export const createInitialAppState = (): AppState => {
     messages: createSeedMessages(users),
     passwordResetRequests: [],
     tournamentApplications: [],
+    disciplineRecords: [],
   }
 }
 
@@ -1350,5 +1351,6 @@ export const createAdminDemoSeedState = (): AppState => {
     messages: [{ id: 'demo-message-1', senderId: demoUsers[0].id, senderName: demoUsers[0].fullName, title: 'Demo Mesaj', body: 'Test verisi aktif.', read: false, createdAt: '2026-08-29T09:00:00.000Z' }],
     passwordResetRequests: [],
     tournamentApplications: [],
+    disciplineRecords: [],
   }
 }
