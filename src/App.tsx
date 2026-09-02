@@ -377,6 +377,17 @@ function AuthScreen() {
     setForgotUsername('')
   }
 
+  const normalizeGeneratedUsername = (fullName: string) =>
+    fullName
+      .replace(/ğ/g, 'g').replace(/Ğ/g, 'G')
+      .replace(/ü/g, 'u').replace(/Ü/g, 'U')
+      .replace(/ş/g, 's').replace(/Ş/g, 'S')
+      .replace(/ı/g, 'i').replace(/İ/g, 'I')
+      .replace(/ö/g, 'o').replace(/Ö/g, 'O')
+      .replace(/ç/g, 'c').replace(/Ç/g, 'C')
+      .replace(/\s+/g, '')
+      .toUpperCase()
+
   return (
     <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
       <div className="glass-panel mx-auto max-w-md rounded-[30px] p-5">
@@ -429,15 +440,14 @@ function AuthScreen() {
                 required
                 value={registerForm.fullName}
                 onChange={(event) => {
-                  const nextFullName = event.target.value.toLocaleUpperCase('tr-TR')
+                  const nextFullName = event.target.value
                   setRegisterForm({
                     ...registerForm,
                     fullName: nextFullName,
-                    username: nextFullName ? nextFullName.replace(/\s+/g, '').toLocaleUpperCase('tr-TR') : registerForm.username,
+                    username: nextFullName ? normalizeGeneratedUsername(nextFullName) : '',
                   })
                 }}
-                className="glass-input mt-1 w-full rounded-2xl px-3 py-2.5 text-white uppercase"
-                style={{ textTransform: 'uppercase' }}
+                className="glass-input mt-1 w-full rounded-2xl px-3 py-2.5 text-white"
               />
             </label>
             <label className="premium-label">
@@ -446,11 +456,10 @@ function AuthScreen() {
                 required
                 value={registerForm.username}
                 onChange={(event) => {
-                  const nextUsername = event.target.value.toLocaleUpperCase('tr-TR')
+                  const nextUsername = normalizeGeneratedUsername(event.target.value)
                   setRegisterForm((previous) => ({
                     ...previous,
                     username: nextUsername,
-                    fullName: previous.fullName || nextUsername,
                   }))
                 }}
                 className="glass-input mt-1 w-full rounded-2xl px-3 py-2.5 text-white uppercase"
