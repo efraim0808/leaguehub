@@ -152,12 +152,13 @@ const getPersistedPlayerPayload = (player: Player, teamId: string) => {
 export const sanitizeUserPayload = (payload: Record<string, unknown>) => {
   const allowedKeys = new Set([
     'id',
-    'full_name',
+    'name',
     'email',
     'password',
     'username',
     'role',
     'permissions',
+    'status',
     'team_id',
     'team_manager_request',
     'is_active',
@@ -1044,7 +1045,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       password: generatedPassword,
       options: {
         data: {
-          full_name: resolvedFullName,
+          name: resolvedFullName,
           username,
         },
       },
@@ -1058,11 +1059,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const userPayload = sanitizeUserPayload({
       id: userId,
-      full_name: resolvedFullName,
-      email: generatedEmail,
-      password,
       username,
-      role: 'Visitor',
+      password,
+      email: generatedEmail,
+      name: resolvedFullName,
+      role: 'USER',
       permissions: {
         fikstur: false,
         puanDurumu: false,
@@ -1074,10 +1075,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         duyurular: false,
         ayarlar: false,
       },
-      is_active: true,
-      kvkk_accepted: true,
-      phone: payload.phone.trim(),
-      tc: payload.tc.trim(),
+      status: 'Aktif',
     })
 
     console.log('[LeagueHub Register] captured password from form state:', { passwordPresent: Boolean(password), passwordLength: password.length })
