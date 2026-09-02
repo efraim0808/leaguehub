@@ -333,7 +333,7 @@ function AppShell() {
 function AuthScreen() {
   const { login, register, requestPasswordReset } = useAppContext()
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [loginForm, setLoginForm] = useState({ username: 'sagliksk', password: 'Efraim+08' })
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
   const [registerForm, setRegisterForm] = useState({
     fullName: '',
     username: '',
@@ -342,6 +342,10 @@ function AuthScreen() {
     tc: '',
     acceptKvkk: false,
   })
+
+  useEffect(() => {
+    setLoginForm({ username: '', password: '' })
+  }, [])
   const [authMessage, setAuthMessage] = useState('')
   const [kvkkOpen, setKvkkOpen] = useState(false)
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
@@ -410,6 +414,9 @@ function AuthScreen() {
 
         {mode === 'login' ? (
           <form onSubmit={submitLogin} className="space-y-4">
+            <input type="text" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
+            <input type="password" style={{ display: 'none' }} aria-hidden="true" tabIndex={-1} />
+
             <label className="premium-label">
               Kullanıcı Adı
               <input
@@ -417,7 +424,7 @@ function AuthScreen() {
                 placeholder="Kullanıcı Adı"
                 value={loginForm.username}
                 onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })}
-                autoComplete="off"
+                autoComplete="one-time-code"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck="false"
