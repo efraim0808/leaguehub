@@ -413,8 +413,14 @@ function AuthScreen() {
             <label className="premium-label">
               Kullanıcı Adı
               <input
+                type="text"
+                placeholder="Kullanıcı Adı"
                 value={loginForm.username}
                 onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck="false"
                 className="glass-input mt-1 w-full rounded-2xl px-3 py-2.5 text-white"
               />
             </label>
@@ -422,8 +428,10 @@ function AuthScreen() {
               Şifre
               <input
                 type="password"
+                placeholder="Şifre"
                 value={loginForm.password}
                 onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                autoComplete="new-password"
                 className="glass-input mt-1 w-full rounded-2xl px-3 py-2.5 text-white"
               />
             </label>
