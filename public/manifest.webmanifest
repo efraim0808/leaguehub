@@ -1,0 +1,10 @@
+{
+  "name": "LeagueHub",
+  "short_name": "LeagueHub",
+  "description": "Hastane ve spor kulüpleri turnuva yönetim platformu",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#020817",
+  "theme_color": "#0f172a",
+  "icons": []
+}
