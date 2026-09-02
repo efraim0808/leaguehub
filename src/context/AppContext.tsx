@@ -973,7 +973,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const { data: userRecord, error: userLookupError } = await supabase
       .from('users')
-      .select('id, username, password, role, permissions, status, name')
+      .select('*')
       .eq('username', exactUsername)
       .single()
 
