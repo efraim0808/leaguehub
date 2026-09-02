@@ -4461,7 +4461,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         </div>
       ) : null}
 
-      {(normalizeRole(currentUser?.role) === 'visitor' || normalizeRole(currentUser?.role) === '' || normalizeRole(currentUser?.role) === 'profil') ? (
+      {currentUser && !['admin', 'super admin', 'süper admin', 'yönetici', 'yonetici'].includes(normalizeRole(currentUser.role)) ? (
         <div className="rounded-[28px] border border-cyan-500/30 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,1))] p-4 shadow-[0_18px_40px_rgba(34,211,238,0.12)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
