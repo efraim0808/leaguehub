@@ -959,6 +959,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const normalizedUsername = (username ?? '').trim()
     const trimmedPassword = (password ?? '').trim()
 
+    console.log('Aranan:', normalizedUsername)
+
     if (!normalizedUsername || !trimmedPassword) {
       console.warn('[LeagueHub Login] Missing login state values', {
         usernameProvided: Boolean(username),
@@ -971,12 +973,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const { data: userRecord, error: userLookupError } = await supabase
       .from('users')
-      .select('id, username, password, full_name, role, team_id, email')
+      .select('id, username, password, role, permissions, status, name')
       .eq('username', exactUsername)
-      .eq('password', trimmedPassword)
-      .maybeSingle()
+      .single()
 
-    if (userLookupError || !userRecord) {
+    if (userLookupError) {
+      console.error('Supabase Sorgu Hatası:', userLookupError.message)
       console.warn('[LeagueHub Login] user not found or password mismatch', {
         username: exactUsername,
         userLookupError,
@@ -984,13 +986,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: 'Kullanıcı adı veya şifre hatalı' }
     }
 
+    if (!userRecord || userRecord.password !== trimmedPassword) {
+      return { success: false, message: 'Kullanıcı adı veya şifre hatalı' }
+    }
+
+    const safeUserRecord = userRecord as {
+      id: string
+      username?: string
+      name?: string
+      role?: string
+      team_id?: string
+      email?: string
+      permissions?: PermissionSet
+    }
+
     setSessionState({
-      id: userRecord.id,
-      fullName: userRecord.full_name ?? userRecord.username ?? exactUsername,
-      email: userRecord.email ?? '',
-      role: userRecord.role ?? 'Visitor',
-      teamId: userRecord.team_id ?? undefined,
-      username: userRecord.username ?? exactUsername,
+      id: safeUserRecord.id,
+      fullName: safeUserRecord.name ?? safeUserRecord.username ?? exactUsername,
+      email: safeUserRecord.email ?? '',
+      role: (safeUserRecord.role as SessionUser['role']) ?? 'Visitor',
+      teamId: safeUserRecord.team_id ?? undefined,
+      username: safeUserRecord.username ?? exactUsername,
     })
 
     return { success: true, message: 'Giriş başarılı.' }
@@ -1005,9 +1021,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     acceptKvkk: boolean
   }): Promise<{ success: boolean; message: string }> => {
     const fullName = payload.fullName?.trim() ?? ''
-    const username = payload.username?.trim() ?? ''
+    const username = (payload.username?.trim() ?? '').toUpperCase()
     const password = payload.password?.trim() ?? ''
     const resolvedFullName = fullName || username
+
+    console.log('Kayıt için aranan username:', username)
 
     if (!resolvedFullName || !username || !password || !payload.phone?.trim() || !payload.tc?.trim() || !payload.acceptKvkk) {
       return { success: false, message: 'Tüm alanlar zorunludur ve KVKK onayı gereklidir.' }
@@ -1065,7 +1083,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     console.log('[LeagueHub Register] captured password from form state:', { passwordPresent: Boolean(password), passwordLength: password.length })
     console.log('[LeagueHub Register] posting user to public.users', userPayload)
 
-    const userInsertResult = await supabase.from('users').insert(userPayload)
+    const userInsertResult = await supabase.from('users').insert([userPayload])
     const userInsertError = userInsertResult.error
 
     if (userInsertError) {
