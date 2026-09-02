@@ -41,7 +41,7 @@ const EMPTY_APP_STATE: AppState = {
   disciplineRecords: [],
 }
 
-const usersSelectColumns = 'id, name, full_name, email, username, password, role, team_id, permissions, phone, tc, is_active, kvkk_accepted, created_at'
+const usersSelectColumns = '*'
 
 const defaultPermissions: PermissionSet = {
   fikstur: true,
@@ -1034,7 +1034,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const generatedEmail = buildUniqueAuthEmail(username)
     const generatedPassword = password.length >= 12 ? password : `${password}LeagueHub!2026`
 
-    const { data: existingUser } = await supabase.from('users').select('id').eq('username', username).maybeSingle()
+    const { data: existingUser } = await supabase.from('users').select('*').eq('username', username).maybeSingle()
     if (existingUser) {
       return { success: false, message: 'Bu kullanıcı adı kullanımda.' }
     }

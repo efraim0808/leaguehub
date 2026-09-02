@@ -1891,7 +1891,7 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     const loadTournamentMatches = async () => {
       const { data: teamsData, error: teamsError } = await supabase
         .from('teams')
-        .select('id, name')
+        .select('*')
 
       if (!isMounted) return
 
