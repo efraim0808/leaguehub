@@ -358,6 +358,23 @@ export const sanitizeMatchPayload = (payload: Record<string, unknown>) => {
   }, {})
 }
 
+const normalizeUuidLikeField = (value: unknown): unknown => {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return value
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  const matches = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi) ?? []
+
+  if (matches.length !== 1 || !uuidPattern.test(trimmed)) {
+    return null
+  }
+
+  return trimmed
+}
+
 export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>) => {
   const safePayload = { ...payload }
   delete safePayload.player_name
@@ -381,7 +398,21 @@ export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>)
   ])
 
   return Object.entries(safePayload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
-    if (allowedKeys.has(key) && value !== undefined && value !== null) {
+    if (!allowedKeys.has(key) || value === undefined) {
+      return accumulator
+    }
+
+    if (key === 'match_id' || key === 'player_id' || key === 'id') {
+      const normalized = normalizeUuidLikeField(value)
+      if (normalized === null) {
+        accumulator[key] = null
+        return accumulator
+      }
+      accumulator[key] = normalized
+      return accumulator
+    }
+
+    if (value !== null) {
       accumulator[key] = value
     }
     return accumulator

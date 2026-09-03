@@ -66,6 +66,23 @@ export const sanitizeDisciplinePatch = (payload: Record<string, unknown>) => {
   }, {})
 }
 
+const normalizeSingleUuidValue = (value: unknown): unknown => {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'string') return value
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  const matches = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi) ?? []
+
+  if (matches.length !== 1 || !uuidPattern.test(trimmed)) {
+    return null
+  }
+
+  return trimmed
+}
+
 export const sanitizeMatchEventPayload = (payload: Record<string, unknown>) => {
   const allowedKeys = new Set([
     'id',
@@ -85,8 +102,8 @@ export const sanitizeMatchEventPayload = (payload: Record<string, unknown>) => {
       return accumulator
     }
 
-    const normalizedValue = typeof value === 'string' && value.trim() === '' && uuidKeys.has(key)
-      ? null
+    const normalizedValue = uuidKeys.has(key)
+      ? normalizeSingleUuidValue(value)
       : value
 
     if (normalizedValue === null) {

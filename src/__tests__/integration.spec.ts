@@ -350,8 +350,8 @@ describe('LeagueHub – full integration scenarios', () => {
   it('normalizes empty UUID fields before writing match events and strips schema-invalid stats columns', () => {
     const eventPayload = sanitizeMatchEventPayload({
       id: '550e8400-e29b-41d4-a716-446655440000',
-      match_id: '',
-      team_id: 'team-1',
+      match_id: '550e8400-e29b-41d4-a716-446655440000550e8400-e29b-41d4-a716-446655440000',
+      team_id: '550e8400-e29b-41d4-a716-446655440000',
       player_id: '',
       type: 'goal',
       minute: 12,
@@ -360,7 +360,7 @@ describe('LeagueHub – full integration scenarios', () => {
 
     expect(eventPayload).toMatchObject({
       id: '550e8400-e29b-41d4-a716-446655440000',
-      team_id: 'team-1',
+      team_id: '550e8400-e29b-41d4-a716-446655440000',
       type: 'goal',
       minute: 12,
       description: 'Gol',
@@ -369,11 +369,11 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(eventPayload).toHaveProperty('player_id', null)
 
     const statsPayload = sanitizeMatchStatisticsPayload({
-      id: 'stat-1',
+      id: '550e8400-e29b-41d4-a716-446655440000',
       tournament_id: 't-1',
-      match_id: 'match-1',
+      match_id: '550e8400-e29b-41d4-a716-446655440000550e8400-e29b-41d4-a716-446655440000',
       team_id: 'team-1',
-      player_id: 'player-1',
+      player_id: '550e8400-e29b-41d4-a716-446655440000',
       goals: 2,
       yellow_cards: 1,
       red_cards: 0,
@@ -383,13 +383,13 @@ describe('LeagueHub – full integration scenarios', () => {
     })
 
     expect(statsPayload).toMatchObject({
-      id: 'stat-1',
-      match_id: 'match-1',
-      player_id: 'player-1',
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      player_id: '550e8400-e29b-41d4-a716-446655440000',
       goals: 2,
       yellow_cards: 1,
       red_cards: 0,
     })
+    expect(statsPayload).toHaveProperty('match_id', null)
     expect(statsPayload).not.toHaveProperty('tournament_id')
     expect(statsPayload).not.toHaveProperty('team_id')
     expect(statsPayload).not.toHaveProperty('player_name')
