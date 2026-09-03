@@ -45,6 +45,7 @@ import {
   sanitizeDisciplineRecordPayload,
   sanitizeFixturePayload,
   sanitizeMatchPayload,
+  sanitizeMatchStatisticsPayload,
   sanitizePlayerPayload,
   sanitizeTeamPayload,
   sanitizeTeamRegistrationPayload,
@@ -346,6 +347,34 @@ describe('LeagueHub – full integration scenarios', () => {
   })
 
   it('drops stale user/team fields and strips legacy tournament and match columns before database writes', () => {
+    const statsPayload = sanitizeMatchStatisticsPayload({
+      id: 'stat-1',
+      tournament_id: 't-1',
+      match_id: 'match-1',
+      team_id: 'team-1',
+      player_id: 'player-1',
+      goals: 2,
+      yellow_cards: 1,
+      red_cards: 0,
+      substitutions: 1,
+      player_name: 'Ali',
+      extra_field: 'should be removed',
+    })
+
+    expect(statsPayload).toMatchObject({
+      id: 'stat-1',
+      tournament_id: 't-1',
+      match_id: 'match-1',
+      team_id: 'team-1',
+      player_id: 'player-1',
+      goals: 2,
+      yellow_cards: 1,
+      red_cards: 0,
+      substitutions: 1,
+    })
+    expect(statsPayload).not.toHaveProperty('player_name')
+    expect(statsPayload).not.toHaveProperty('extra_field')
+
     const userPayload = sanitizeUserPayload({
       id: 'user-123',
       full_name: 'Efraim Yılmaz',

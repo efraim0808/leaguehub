@@ -356,6 +356,33 @@ export const sanitizeMatchPayload = (payload: Record<string, unknown>) => {
   }, {})
 }
 
+export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>) => {
+  const safePayload = { ...payload }
+  delete safePayload.player_name
+  delete safePayload.playerName
+  delete safePayload.created_at
+  delete safePayload.createdAt
+
+  const allowedKeys = new Set([
+    'id',
+    'tournament_id',
+    'match_id',
+    'team_id',
+    'player_id',
+    'goals',
+    'yellow_cards',
+    'red_cards',
+    'substitutions',
+  ])
+
+  return Object.entries(safePayload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
+    if (allowedKeys.has(key) && value !== undefined && value !== null) {
+      accumulator[key] = value
+    }
+    return accumulator
+  }, {})
+}
+
 const isValidUuid = (value: unknown): boolean => {
   if (typeof value !== 'string') return false
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim())
@@ -1626,13 +1653,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const stats = buildMatchStatistics(match, tournament?.id ?? match.fixtureId, allPlayers)
 
       if (stats.length > 0) {
-        const playerStatRows = stats.map((stat) => ({
+        const playerStatRows = stats.map((stat) => sanitizeMatchStatisticsPayload({
           id: stat.id,
           tournament_id: tournament?.id ?? match.fixtureId,
           match_id: stat.matchId,
           team_id: stat.teamId,
           player_id: stat.playerId,
-          player_name: stat.playerName,
           goals: stat.goals,
           yellow_cards: stat.yellowCards,
           red_cards: stat.redCards,
