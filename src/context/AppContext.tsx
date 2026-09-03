@@ -158,7 +158,6 @@ export const sanitizeUserPayload = (payload: Record<string, unknown>) => {
     'username',
     'role',
     'permissions',
-    'status',
     'team_id',
     'team_manager_request',
     'is_active',

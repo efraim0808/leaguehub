@@ -51,7 +51,7 @@ import {
   sanitizeTournamentPayload,
   sanitizeUserPayload,
 } from '../context/AppContext'
-import { buildFixtureRowsFromMatches, buildFixtureWeekGroups, normalizeSponsorRecord, sortMatchesChronologically } from '../App'
+import { buildFixtureRowsFromMatches, buildFixtureWeekGroups, normalizeSponsorRecord, resolveMatchEventSelection, sortMatchesChronologically } from '../App'
 import { checkPermission } from '../utils/permissions'
 
 const createStorage = () => {
@@ -874,6 +874,63 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(withCaptain.players.some((player) => player.name === 'Mehmet Şen')).toBe(true)
     expect(withCaptain.players.find((player) => player.id === addedPlayer.id)?.isCaptain).toBe(true)
     expect(suspended.players.find((player) => player.id === addedPlayer.id)?.isSuspended).toBe(true)
+  })
+
+  it('falls back to a valid team and player when the live match event form is incomplete', () => {
+    const teams = [{
+      id: 'team-home',
+      name: 'Galatasaray',
+      shortName: 'GTS',
+      city: 'İstanbul',
+      status: 'Onaylı' as const,
+      managerId: 'manager-home',
+      players: [{
+        id: 'player-home-1',
+        name: 'Ali',
+        unit: 'A',
+        phone: '',
+        tc: '',
+        yellowCards: 0,
+        redCards: 0,
+        isSuspended: false,
+        isCaptain: false,
+      }],
+    }, {
+      id: 'team-away',
+      name: 'Fenerbahçe',
+      shortName: 'FNB',
+      city: 'İstanbul',
+      status: 'Onaylı' as const,
+      managerId: 'manager-away',
+      players: [{
+        id: 'player-away-1',
+        name: 'Veli',
+        unit: 'A',
+        phone: '',
+        tc: '',
+        yellowCards: 0,
+        redCards: 0,
+        isSuspended: false,
+        isCaptain: false,
+      }],
+    }] as any
+
+    const match = {
+      id: 'match-1',
+      fixtureId: 'fixture-1',
+      homeTeamId: 'team-home',
+      awayTeamId: 'team-away',
+      homeScore: 0,
+      awayScore: 0,
+      status: 'Başlatıldı' as const,
+      events: [],
+    } as any
+
+    const selection = resolveMatchEventSelection(match, teams, { teamId: '', playerId: '', minute: '', type: 'goal', description: '' })
+
+    expect(selection.teamId).toBe('team-home')
+    expect(selection.playerId).toBe('player-home-1')
+    expect(selection.minute).toBe(0)
   })
 
   it('executes live match flow: start, goals, cards, substitutions, finish and MVP', () => {

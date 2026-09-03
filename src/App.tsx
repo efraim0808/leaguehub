@@ -169,6 +169,35 @@ const resolveFixtureTeamName = (fixture: any, side: 'home' | 'away', safeTeams: 
   return fixture?.away_team_name ?? fixture?.awayTeamName ?? fixture?.away_team?.name ?? 'Takım'
 }
 
+export const resolveMatchEventSelection = (
+  match: Pick<Match, 'homeTeamId' | 'awayTeamId'>,
+  teams: Team[],
+  draft: Partial<{ teamId: string; playerId: string; minute: number | string; type: MatchEvent['type']; description: string }>,
+) => {
+  const homeTeam = teams.find((team) => team.id === match.homeTeamId)
+  const awayTeam = teams.find((team) => team.id === match.awayTeamId)
+  const homePlayers = filterSelectablePlayers(homeTeam?.players ?? [])
+  const awayPlayers = filterSelectablePlayers(awayTeam?.players ?? [])
+  const validTeamIds = new Set([match.homeTeamId, match.awayTeamId].filter(Boolean))
+  const selectedTeamId = draft.teamId && validTeamIds.has(draft.teamId) ? draft.teamId : match.homeTeamId
+  const teamPlayers = selectedTeamId === match.homeTeamId ? homePlayers : awayPlayers
+  const fallbackPlayerId = teamPlayers[0]?.id ?? homePlayers[0]?.id ?? awayPlayers[0]?.id ?? ''
+  const playerId = draft.playerId && teamPlayers.some((player) => player.id === draft.playerId)
+    ? draft.playerId
+    : fallbackPlayerId
+
+  const numericMinute = Number(draft.minute ?? 0)
+  const safeMinute = Number.isFinite(numericMinute) ? Math.max(0, Math.min(120, Math.floor(Math.abs(numericMinute)))) : 0
+
+  return {
+    teamId: selectedTeamId,
+    playerId,
+    minute: safeMinute,
+    type: draft.type ?? 'goal',
+    description: typeof draft.description === 'string' ? draft.description : '',
+  }
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -2058,33 +2087,25 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
   const handleFixtureEventAdd = async (match: Match) => {
     if (!canManageMatchControls) return
 
-    const homeTeam = safeTeams.find((team) => team.id === match.homeTeamId)
-    const awayTeam = safeTeams.find((team) => team.id === match.awayTeamId)
-    const teamPlayers = eventDraft.teamId === match.homeTeamId
-      ? filterSelectablePlayers(homeTeam?.players ?? [])
-      : filterSelectablePlayers(awayTeam?.players ?? [])
-
-    if (!eventDraft.playerId || !teamPlayers.some((player) => player.id === eventDraft.playerId)) {
-      return
-    }
-
+    const resolved = resolveMatchEventSelection(match, safeTeams, eventDraft)
+    const fallbackTeam = safeTeams.find((team) => team.id === resolved.teamId)
     const nextMatch = {
       ...match,
       events: [
         ...(match.events ?? []),
         {
           id: crypto.randomUUID(),
-          type: eventDraft.type,
-          minute: Number(eventDraft.minute) || 0,
-          teamId: eventDraft.teamId,
-          playerId: eventDraft.playerId,
-          description: eventDraft.description.trim() || `${eventDraft.type === 'goal' ? 'Gol' : eventDraft.type === 'yellow' ? 'Sarı kart' : eventDraft.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
+          type: resolved.type,
+          minute: resolved.minute,
+          teamId: resolved.teamId,
+          playerId: resolved.playerId,
+          description: resolved.description.trim() || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
         },
       ],
     }
 
-    if (eventDraft.type === 'goal') {
-      if (eventDraft.teamId === match.homeTeamId) {
+    if (resolved.type === 'goal') {
+      if (resolved.teamId === match.homeTeamId) {
         nextMatch.homeScore = match.homeScore + 1
       } else {
         nextMatch.awayScore = match.awayScore + 1
@@ -2092,7 +2113,7 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     }
 
     await updateMatchState(nextMatch)
-    setEventDraft({ teamId: match.homeTeamId, playerId: homeTeam?.players?.[0]?.id ?? '', minute: 0, type: 'goal', description: '' })
+    setEventDraft({ teamId: match.homeTeamId, playerId: fallbackTeam?.players?.[0]?.id ?? '', minute: 0, type: 'goal', description: '' })
   }
 
   const handleFixtureEventRemove = async (match: Match, eventId: string) => {
@@ -2285,12 +2306,7 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
 
     const persistedSeconds = (Number(selectedMatch.elapsedMinutes ?? 0) * 60) || 0
     setLiveElapsedSeconds(persistedSeconds)
-    setIsPlaying((current) => {
-      if (selectedMatch.status === 'Başlatıldı') {
-        return current || false
-      }
-      return false
-    })
+    setIsPlaying(selectedMatch.status === 'Başlatıldı')
 
     setEventDraft((current) => {
       if (current.matchId === selectedMatch.id) return current
@@ -2310,7 +2326,20 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
     if (!selectedMatch || !isPlaying) return
 
     const timerId = window.setInterval(() => {
-      setLiveElapsedSeconds((current) => current + 1)
+      setLiveElapsedSeconds((current) => {
+        const nextSeconds = current + 1
+        const nextMinutes = Math.max(0, Math.floor(nextSeconds / 60))
+        void supabase
+          .from('matches')
+          .update({ elapsed_minutes: nextMinutes })
+          .eq('id', selectedMatch.id)
+          .then(({ error }) => {
+            if (error) {
+              console.warn('[LeagueHub] Live match elapsed sync failed:', error)
+            }
+          })
+        return nextSeconds
+      })
     }, 1000)
 
     return () => window.clearInterval(timerId)
@@ -2359,19 +2388,19 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
   }
 
   const handleAddEvent = async (match: Match) => {
-    const current = eventDraft.matchId === match.id ? eventDraft : { ...eventDraft, matchId: match.id, teamId: match.homeTeamId, playerId: match.homeTeamId ? safeTeams[0]?.players?.[0]?.id ?? '' : '', mvpPlayerId: '' }
-    if (!current.playerId || !current.teamId) return
+    const current = eventDraft.matchId === match.id ? eventDraft : { ...eventDraft, matchId: match.id, teamId: match.homeTeamId, playerId: match.homeTeamId ? safeTeams.find((team) => team.id === match.homeTeamId)?.players?.[0]?.id ?? '' : '', mvpPlayerId: '' }
+    const resolved = resolveMatchEventSelection(match, safeTeams, current)
     const event: MatchEvent = {
       id: crypto.randomUUID(),
-      type: current.type,
-      minute: current.minute,
-      teamId: current.teamId,
-      playerId: current.playerId,
-      description: current.description || `${current.type === 'goal' ? 'Gol' : current.type === 'yellow' ? 'Sarı kart' : current.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
+      type: resolved.type,
+      minute: resolved.minute,
+      teamId: resolved.teamId,
+      playerId: resolved.playerId,
+      description: resolved.description || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
     }
     const nextMatch = { ...match, events: [...match.events, event] }
-    if (current.type === 'goal') {
-      if (current.teamId === match.homeTeamId) {
+    if (resolved.type === 'goal') {
+      if (resolved.teamId === match.homeTeamId) {
         nextMatch.homeScore = match.homeScore + 1
       } else {
         nextMatch.awayScore = match.awayScore + 1
