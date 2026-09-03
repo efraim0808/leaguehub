@@ -973,6 +973,158 @@ function LeagueTabBar({ activeTab, onChange }: { activeTab: LeagueTab; onChange:
   )
 }
 
+const buildTournamentFixtureRows = ({
+  tournament,
+  teams,
+  matches,
+  directMatches = [],
+}: {
+  tournament: Tournament | null | undefined
+  teams: Team[]
+  matches: Match[]
+  directMatches?: Match[]
+}) => {
+  if (!tournament) return []
+
+  const directFixtures = tournament.fixtures ?? []
+  if (directFixtures.length > 0) {
+    return directFixtures
+  }
+
+  const candidateMatches = (directMatches.length > 0 ? directMatches : matches).filter((match) => {
+    if (match.tournamentId === tournament.id) return true
+    if (match.tournamentId) return false
+    if (tournament.teams.length === 0) return Boolean(match.homeTeamId && match.awayTeamId)
+    return tournament.teams.includes(match.homeTeamId) || tournament.teams.includes(match.awayTeamId)
+  })
+
+  return buildFixtureRowsFromMatches(candidateMatches, tournament.id, tournament.teams.length > 0 ? tournament.teams : teams.map((team) => team.id))
+}
+
+function FixtureWeekCarousel({
+  fixtureWeeks,
+  selectedWeek,
+  onSelectWeek,
+  safeTeams,
+  onSelectFixture,
+}: {
+  fixtureWeeks: { key: string; label: string; entries: Fixture[] }[]
+  selectedWeek: string
+  onSelectWeek: (nextWeek: string) => void
+  safeTeams: Team[]
+  onSelectFixture?: (fixtureId: string) => void
+}) {
+  if (!fixtureWeeks.length) {
+    return (
+      <div className="rounded-[22px] border border-dashed border-slate-700 bg-slate-950/40 p-6 text-center text-sm text-slate-300">
+        Bu turnuvada henüz fikstür oluşturulmadı.
+      </div>
+    )
+  }
+
+  const activeWeekIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
+  const fallbackWeekIndex = activeWeekIndex >= 0 ? activeWeekIndex : 0
+  const activeWeek = fixtureWeeks[fallbackWeekIndex] ?? fixtureWeeks[0]
+  const visibleFixtures = activeWeek ? activeWeek.entries : []
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
+            const nextIndex = Math.max(currentIndex - 1, 0)
+            onSelectWeek(fixtureWeeks[nextIndex]?.label ?? '')
+          }}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
+          aria-label="Önceki hafta"
+        >
+          ‹
+        </button>
+
+        <div className="flex-1 overflow-x-auto pb-1">
+          <div className="flex min-w-max gap-2">
+            {fixtureWeeks.map((week) => (
+              <button
+                key={week.key}
+                type="button"
+                onClick={() => onSelectWeek(week.label)}
+                className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
+                  selectedWeek === week.label
+                    ? 'border-cyan-400 bg-cyan-500/15 text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.2)]'
+                    : 'border-slate-700 bg-slate-950 text-slate-300'
+                }`}
+              >
+                {week.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
+            const nextIndex = Math.min(currentIndex + 1, Math.max(fixtureWeeks.length - 1, 0))
+            onSelectWeek(fixtureWeeks[nextIndex]?.label ?? '')
+          }}
+          className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
+          aria-label="Sonraki hafta"
+        >
+          ›
+        </button>
+      </div>
+
+      {activeWeek ? (
+        <div className="space-y-3 pt-2">
+          {visibleFixtures.map((fixture) => {
+            const home = safeTeams.find((team) => team.id === fixture.homeTeamId)
+            const away = safeTeams.find((team) => team.id === fixture.awayTeamId)
+            const homeId = (fixture as any).home_team_id ?? fixture.homeTeamId ?? 'Bilinmiyor'
+            const awayId = (fixture as any).away_team_id ?? fixture.awayTeamId ?? 'Bilinmiyor'
+            const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || `Takım ID: ${homeId}`
+            const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || `Takım ID: ${awayId}`
+            const isLive = fixture.status === 'Devam Ediyor'
+            const timeLabel = isLive ? 'MS' : fixture.time || 'TBD'
+
+            return (
+              <div
+                key={fixture.id}
+                onClick={() => onSelectFixture?.(fixture.id)}
+                className={`rounded-[22px] border border-slate-800 bg-slate-950/80 p-3 shadow-[0_0_20px_rgba(15,23,42,0.25)] ${onSelectFixture ? 'cursor-pointer' : ''} ${isLive ? 'border-red-500/40 bg-red-500/5' : ''}`}
+              >
+                <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                  <span>{formatFixtureDateTitle(fixture.date)}</span>
+                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-cyan-300">{timeLabel}</span>
+                </div>
+
+                <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5 text-left">
+                    <TeamLogo team={home} size={28} />
+                    <span className="truncate text-sm font-bold text-white">{homeName}</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-lg font-black text-cyan-300">
+                    <span>{fixture.homeScore}</span>
+                    <span className="text-slate-500">-</span>
+                    <span>{fixture.awayScore}</span>
+                  </div>
+
+                  <div className="flex min-w-0 items-center justify-end gap-2.5 text-right">
+                    <span className="truncate text-sm font-bold text-white">{awayName}</span>
+                    <TeamLogo team={away} size={28} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches: Match[] }) {
   const { appState, updatePlayerDiscipline, setAppState, refreshData } = useAppContext()
   const [activeStandingsTab, setActiveStandingsTab] = useState<LeagueTab>('standings')
@@ -1067,9 +1219,12 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
   }, [matches, safeTeams, tournament])
 
   const fixtureRows = useMemo(() => {
-    if (!matches.length) return []
-    const filtered = matches.filter((match) => Boolean(match.homeTeamId && match.awayTeamId))
-    return buildFixtureRowsFromMatches(filtered, tournament?.id ?? 'standings', safeTeams.map((team) => team.id))
+    return buildTournamentFixtureRows({
+      tournament,
+      teams: safeTeams,
+      matches,
+      directMatches: [],
+    })
   }, [matches, safeTeams, tournament])
 
   const fixtureWeeks = useMemo(() => buildFixtureWeekGroups(fixtureRows), [fixtureRows])
@@ -1395,105 +1550,12 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
 
       {activeStandingsTab === 'fixtures' ? (
         <div className="space-y-4 rounded-[28px] border border-slate-800 bg-slate-900 p-4">
-          {fixtureWeeks.length > 0 ? (
-            <>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedFixtureWeek)
-                    const nextIndex = Math.max(currentIndex - 1, 0)
-                    setSelectedFixtureWeek(fixtureWeeks[nextIndex]?.label ?? '')
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
-                  aria-label="Önceki hafta"
-                >
-                  ‹
-                </button>
-
-                <div className="flex-1 overflow-x-auto pb-1">
-                  <div className="flex min-w-max gap-2">
-                    {fixtureWeeks.map((week) => (
-                      <button
-                        key={week.key}
-                        type="button"
-                        onClick={() => setSelectedFixtureWeek(week.label)}
-                        className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
-                          selectedFixtureWeek === week.label
-                            ? 'border-cyan-400 bg-cyan-500/15 text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.2)]'
-                            : 'border-slate-700 bg-slate-950 text-slate-300'
-                        }`}
-                      >
-                        {week.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedFixtureWeek)
-                    const nextIndex = Math.min(currentIndex + 1, Math.max(fixtureWeeks.length - 1, 0))
-                    setSelectedFixtureWeek(fixtureWeeks[nextIndex]?.label ?? '')
-                  }}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
-                  aria-label="Sonraki hafta"
-                >
-                  ›
-                </button>
-              </div>
-
-              <div className="space-y-3 pt-1">
-                {visibleFixtureRows.map((fixture) => {
-                  const home = safeTeams.find((team) => team.id === fixture.homeTeamId)
-                  const away = safeTeams.find((team) => team.id === fixture.awayTeamId)
-                  const homeId = (fixture as any).home_team_id ?? fixture.homeTeamId ?? 'Bilinmiyor'
-                  const awayId = (fixture as any).away_team_id ?? fixture.awayTeamId ?? 'Bilinmiyor'
-                  const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || `Takım ID: ${homeId}`
-                  const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || `Takım ID: ${awayId}`
-                  const isLive = fixture.status === 'Devam Ediyor'
-                  const timeLabel = isLive ? 'MS' : fixture.time || 'TBD'
-
-                  return (
-                    <div
-                      key={fixture.id}
-                      className={`rounded-[22px] border border-slate-800 bg-slate-950/80 p-3 shadow-[0_0_20px_rgba(15,23,42,0.25)] ${
-                        isLive ? 'border-red-500/40 bg-red-500/5' : ''
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                        <span>{formatFixtureDateTitle(fixture.date)}</span>
-                        <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-cyan-300">{timeLabel}</span>
-                      </div>
-
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-                        <div className="flex min-w-0 items-center gap-2.5 text-left">
-                          <TeamLogo team={home} size={28} />
-                          <span className="truncate text-sm font-bold text-white">{homeName}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-lg font-black text-cyan-300">
-                          <span>{fixture.homeScore}</span>
-                          <span className="text-slate-500">-</span>
-                          <span>{fixture.awayScore}</span>
-                        </div>
-
-                        <div className="flex min-w-0 items-center justify-end gap-2.5 text-right">
-                          <span className="truncate text-sm font-bold text-white">{awayName}</span>
-                          <TeamLogo team={away} size={28} />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          ) : (
-            <div className="rounded-[22px] border border-dashed border-slate-700 bg-slate-950/40 p-6 text-center text-sm text-slate-300">
-              Bu turnuvada henüz fikstür oluşturulmadı.
-            </div>
-          )}
+          <FixtureWeekCarousel
+            fixtureWeeks={fixtureWeeks}
+            selectedWeek={selectedFixtureWeek}
+            onSelectWeek={setSelectedFixtureWeek}
+            safeTeams={safeTeams}
+          />
         </div>
       ) : null}
 
@@ -1886,23 +1948,14 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     let isMounted = true
 
     const loadTournamentMatches = async () => {
-      const { data: teamsData, error: teamsError } = await supabase
-        .from('teams')
-        .select('*')
-
-      if (!isMounted) return
-
-      if (teamsError) {
-        console.warn('Tournament team load failed:', teamsError)
-        setDirectMatches([])
-        return
-      }
-
-      const teamNameMap = new Map<string, string>((teamsData ?? []).map((team) => [team.id, team.name]))
-
       const { data, error } = await supabase
         .from('matches')
-        .select('*, match_events(*)')
+        .select(`
+          *,
+          home_team:teams!home_team_id(id, name, logo_url, short_name),
+          away_team:teams!away_team_id(id, name, logo_url, short_name),
+          match_events(*)
+        `)
         .eq('tournament_id', tournament.id)
         .order('match_date', { ascending: true })
 
@@ -1917,10 +1970,12 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
       setDirectMatches((data ?? []).map((row) => {
         const homeTeamId = row.home_team_id ?? ''
         const awayTeamId = row.away_team_id ?? ''
-        const mappedHome = teamNameMap.get(homeTeamId) || 'Takım'
-        const mappedAway = teamNameMap.get(awayTeamId) || 'Takım'
-        const homeTeamName = mappedHome || row.home_team_name || row.homeTeamName || homeTeamId || 'Takım'
-        const awayTeamName = mappedAway || row.away_team_name || row.awayTeamName || awayTeamId || 'Takım'
+        const homeTeam = Array.isArray(row.home_team) ? row.home_team[0] : row.home_team ?? null
+        const awayTeam = Array.isArray(row.away_team) ? row.away_team[0] : row.away_team ?? null
+        const mappedHome = homeTeam?.name ?? row.home_team_name ?? row.homeTeamName ?? 'Takım'
+        const mappedAway = awayTeam?.name ?? row.away_team_name ?? row.awayTeamName ?? 'Takım'
+        const homeTeamName = mappedHome || homeTeamId || 'Takım'
+        const awayTeamName = mappedAway || awayTeamId || 'Takım'
         const eventsFromMatch = (Array.isArray(row.match_events) ? row.match_events : []).map((eventRow: any) => ({
           id: eventRow.id,
           type: eventRow.type ?? 'goal',
@@ -1940,8 +1995,8 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
           awayTeamName,
           mappedHome,
           mappedAway,
-          home_team: { id: homeTeamId, name: homeTeamName },
-          away_team: { id: awayTeamId, name: awayTeamName },
+          home_team: homeTeam ? { id: homeTeam.id, name: homeTeam.name, logoUrl: homeTeam.logo_url ?? homeTeam.logoUrl ?? '', shortName: homeTeam.short_name ?? homeTeam.shortName ?? undefined } : { id: homeTeamId, name: homeTeamName },
+          away_team: awayTeam ? { id: awayTeam.id, name: awayTeam.name, logoUrl: awayTeam.logo_url ?? awayTeam.logoUrl ?? '', shortName: awayTeam.short_name ?? awayTeam.shortName ?? undefined } : { id: awayTeamId, name: awayTeamName },
           home_team_name: homeTeamName,
           away_team_name: awayTeamName,
           homeScore: Number(row.home_score ?? 0),
@@ -1964,24 +2019,13 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
   }, [tournament?.id])
 
   const fixtureList = useMemo(() => {
-    const directFixtures = tournament?.fixtures ?? []
-    if (directFixtures.length > 0) {
-      return directFixtures
-    }
-
-    if (!tournament) {
-      return []
-    }
-
-    const tournamentMatches = (directMatches.length > 0 ? directMatches : matches).filter((match) => {
-      if (match.tournamentId === tournament.id) return true
-      if (match.tournamentId) return false
-      if (tournament.teams.length === 0) return Boolean(match.homeTeamId && match.awayTeamId)
-      return tournament.teams.includes(match.homeTeamId) || tournament.teams.includes(match.awayTeamId)
+    return buildTournamentFixtureRows({
+      tournament,
+      teams: safeTeams,
+      matches,
+      directMatches,
     })
-
-    return buildFixtureRowsFromMatches(tournamentMatches, tournament.id, tournament.teams)
-  }, [directMatches, matches, tournament])
+  }, [directMatches, matches, safeTeams, tournament])
 
   const fixtureWeeks = useMemo(() => buildFixtureWeekGroups(fixtureList), [fixtureList])
 
@@ -2087,110 +2131,13 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
       </div>
 
       <div className="space-y-4 rounded-[28px] border border-slate-800 bg-slate-900 p-4">
-        {fixtureWeeks.length > 0 ? (
-          <>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
-                  const nextIndex = Math.max(currentIndex - 1, 0)
-                  setSelectedWeek(fixtureWeeks[nextIndex]?.label ?? '')
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
-                aria-label="Önceki hafta"
-              >
-                ‹
-              </button>
-
-              <div className="flex-1 overflow-x-auto pb-1">
-                <div className="flex min-w-max gap-2">
-                  {fixtureWeeks.map((week) => (
-                    <button
-                      key={week.key}
-                      type="button"
-                      onClick={() => setSelectedWeek(week.label)}
-                      className={`rounded-full border px-4 py-2 text-sm font-bold transition ${
-                        selectedWeek === week.label
-                          ? 'border-cyan-400 bg-cyan-500/15 text-cyan-300 shadow-[0_0_24px_rgba(34,211,238,0.2)]'
-                          : 'border-slate-700 bg-slate-950 text-slate-300'
-                      }`}
-                    >
-                      {week.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => {
-                  const currentIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
-                  const nextIndex = Math.min(currentIndex + 1, Math.max(fixtureWeeks.length - 1, 0))
-                  setSelectedWeek(fixtureWeeks[nextIndex]?.label ?? '')
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-lg text-slate-200"
-                aria-label="Sonraki hafta"
-              >
-                ›
-              </button>
-            </div>
-
-            {activeWeek ? (
-              <div className="space-y-3 pt-2">
-                {visibleFixtures.map((fixture) => {
-                  const home = safeTeams.find((team) => team.id === fixture.homeTeamId)
-                  const away = safeTeams.find((team) => team.id === fixture.awayTeamId)
-                  const homeId = (fixture as any).home_team_id ?? fixture.homeTeamId ?? 'Bilinmiyor'
-                  const awayId = (fixture as any).away_team_id ?? fixture.awayTeamId ?? 'Bilinmiyor'
-                  const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || `Takım ID: ${homeId}`
-                  const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || `Takım ID: ${awayId}`
-                  const homeDisplayName = homeName
-                  const awayDisplayName = awayName
-                  const isLive = fixture.status === 'Devam Ediyor'
-                  const timeLabel = isLive ? 'MS' : fixture.time || 'TBD'
-
-                  return (
-                    <div
-                      key={fixture.id}
-                      onClick={() => setSelectedFixtureDetailId(fixture.id)}
-                      className={`cursor-pointer rounded-[22px] border border-slate-800 bg-slate-950/80 p-3 shadow-[0_0_20px_rgba(15,23,42,0.25)] ${
-                        isLive ? 'border-red-500/40 bg-red-500/5' : ''
-                      }`}
-                    >
-                      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                        <span>{formatFixtureDateTitle(fixture.date)}</span>
-                        <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-cyan-300">{timeLabel}</span>
-                      </div>
-
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
-                        <div className="flex min-w-0 items-center gap-2.5 text-left">
-                          <TeamLogo team={home} size={28} />
-                          <span className="truncate text-sm font-bold text-white">{homeDisplayName}</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/80 px-2.5 py-1 text-lg font-black text-cyan-300">
-                          <span>{fixture.homeScore}</span>
-                          <span className="text-slate-500">-</span>
-                          <span>{fixture.awayScore}</span>
-                        </div>
-
-                        <div className="flex min-w-0 items-center justify-end gap-2.5 text-right">
-                          <span className="truncate text-sm font-bold text-white">{awayDisplayName}</span>
-                          <TeamLogo team={away} size={28} />
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <div className="rounded-[22px] border border-dashed border-slate-700 bg-slate-950/40 p-6 text-center text-sm text-slate-300">
-            Bu turnuvada henüz fikstür oluşturulmadı.
-          </div>
-        )}
+        <FixtureWeekCarousel
+          fixtureWeeks={fixtureWeeks}
+          selectedWeek={selectedWeek}
+          onSelectWeek={setSelectedWeek}
+          safeTeams={safeTeams}
+          onSelectFixture={setSelectedFixtureDetailId}
+        />
       </div>
 
       {selectedFixtureMatch ? (
