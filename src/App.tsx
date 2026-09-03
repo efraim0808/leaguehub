@@ -1656,10 +1656,11 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
                 if (!first) return
                 openDisciplineEditor(first.team.id, first.player.id)
               }}
-              className="inline-flex items-center gap-2 rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-semibold text-rose-200"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:bg-rose-500/15"
+              aria-label="Cezalı kayıtları düzenle"
+              title="Cezalı kayıtları düzenle"
             >
               <PencilLine size={14} />
-              Düzenle
             </button>
           </div>
 
@@ -2221,7 +2222,15 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
                       <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{getPlayerNameById(event.playerId)} • {event.type} • {event.minute}'</div>
                     </div>
                     {canManageMatchControls ? (
-                      <button type="button" onClick={() => void handleFixtureEventRemove(selectedFixtureMatch, event.id)} className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-xs font-bold text-red-300">Sil</button>
+                      <button
+                        type="button"
+                        onClick={() => void handleFixtureEventRemove(selectedFixtureMatch, event.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                        aria-label={`${event.description} olayını sil`}
+                        title="Olayı sil"
+                      >
+                        <Trash2 size={14} />
+                      </button>
                     ) : null}
                   </div>
                 ))
@@ -4205,16 +4214,20 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                                       <button
                                         type="button"
                                         onClick={() => void handleEditTeam(team)}
-                                        className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-200"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-700 bg-slate-900 text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+                                        aria-label={`${team.name} takımını düzenle`}
+                                        title="Takımı düzenle"
                                       >
-                                        Düzenle
+                                        <PencilLine size={14} />
                                       </button>
                                       <button
                                         type="button"
                                         onClick={() => void handleDeleteTeam(team.id)}
-                                        className="rounded-lg border border-red-500/40 bg-red-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-red-300"
+                                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                                        aria-label={`${team.name} takımını sil`}
+                                        title="Takımı sil"
                                       >
-                                        Sil
+                                        <Trash2 size={14} />
                                       </button>
                                     </div>
                                   ) : null}
@@ -4265,7 +4278,15 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                       <div className="text-[10px] uppercase tracking-[0.28em] text-amber-300">Ana Sayfa</div>
                       <h4 className="mt-2 text-xl font-black text-white">İçerik yönetimi</h4>
                     </div>
-                    <button type="button" onClick={() => setAdminModal('home')} className="rounded-xl bg-amber-500 px-3 py-2 text-sm font-bold text-slate-950">Düzenle</button>
+                    <button
+                      type="button"
+                      onClick={() => setAdminModal('home')}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-200 transition hover:bg-amber-500/15"
+                      aria-label="Ana sayfa düzenle"
+                      title="Ana sayfa düzenle"
+                    >
+                      <PencilLine size={14} />
+                    </button>
                   </div>
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="text-sm font-semibold text-white">Duyurular</div>
@@ -4494,9 +4515,12 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                   type="button"
                   onClick={() => void handleDeleteTournament(tournamentEditor.id)}
                   disabled={!canDeleteTournament}
-                  className="w-full rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label={`${tournamentEditor.name || 'Turnuva'} turnuvasını sil`}
+                  title="Turnuva sil"
                 >
-                  Turnuvayı Sil
+                  <Trash2 size={16} />
+                  <span className="sr-only">Turnuva sil</span>
                 </button>
               </div>
             </div>
@@ -4620,6 +4644,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                             type="button"
                             onClick={() => setTournamentEditor(tournament)}
                             className="inline-flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-950 px-2.5 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-100 transition hover:border-cyan-500/40 hover:text-cyan-200"
+                            aria-label={`${tournament.name} turnuvasını düzenle`}
+                            title="Turnuva ayarlarını aç"
                           >
                             <Settings size={11} />
                             Ayarlar
@@ -4627,9 +4653,11 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                           <button
                             type="button"
                             onClick={() => void handleDeleteTournament(tournament.id)}
-                            className="rounded-xl border border-red-500/40 bg-red-500/10 px-2 py-2 text-xs font-bold text-red-200"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-red-500/40 bg-red-500/10 text-red-200 transition hover:bg-red-500/15"
+                            aria-label={`${tournament.name} turnuvasını sil`}
+                            title="Turnuva sil"
                           >
-                            Sil
+                            <Trash2 size={14} />
                           </button>
                         </div>
                       </div>
@@ -4663,7 +4691,15 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                             <div className="font-semibold text-white">{item.title}</div>
                             <div className="mt-1 text-xs text-slate-400 line-clamp-2">{item.body}</div>
                           </div>
-                          <button type="button" onClick={() => void handleDeleteAnnouncement(item.id)} className="rounded-xl border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs font-semibold text-red-300">Sil</button>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteAnnouncement(item.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                            aria-label={`${item.title} duyurusunu sil`}
+                            title="Duyuruyu sil"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))
                     )}
