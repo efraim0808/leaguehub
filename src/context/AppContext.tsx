@@ -987,7 +987,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { success: false, message: 'Kullanıcı adı veya şifre hatalı' }
     }
 
-    if (!userRecord || userRecord.password !== trimmedPassword) {
+    const passwordMatches = Boolean(userRecord) && typeof userRecord.password === 'string' && userRecord.password === trimmedPassword
+
+    if (!userRecord || !passwordMatches) {
       return { success: false, message: 'Kullanıcı adı veya şifre hatalı' }
     }
 
