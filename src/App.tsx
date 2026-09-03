@@ -986,11 +986,6 @@ const buildTournamentFixtureRows = ({
 }) => {
   if (!tournament) return []
 
-  const directFixtures = tournament.fixtures ?? []
-  if (directFixtures.length > 0) {
-    return directFixtures
-  }
-
   const candidateMatches = (directMatches.length > 0 ? directMatches : matches).filter((match) => {
     if (match.tournamentId === tournament.id) return true
     if (match.tournamentId) return false
@@ -1081,10 +1076,8 @@ function FixtureWeekCarousel({
           {visibleFixtures.map((fixture) => {
             const home = safeTeams.find((team) => team.id === fixture.homeTeamId)
             const away = safeTeams.find((team) => team.id === fixture.awayTeamId)
-            const homeId = (fixture as any).home_team_id ?? fixture.homeTeamId ?? 'Bilinmiyor'
-            const awayId = (fixture as any).away_team_id ?? fixture.awayTeamId ?? 'Bilinmiyor'
-            const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || `Takım ID: ${homeId}`
-            const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || `Takım ID: ${awayId}`
+            const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || 'Takım'
+            const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || 'Takım'
             const isLive = fixture.status === 'Devam Ediyor'
             const timeLabel = isLive ? 'MS' : fixture.time || 'TBD'
 
