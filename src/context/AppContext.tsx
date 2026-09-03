@@ -596,27 +596,14 @@ const selectTableWithFallback = async (table: string, select = '*', dateColumns:
 }
 
 const selectMatchesWithTeamJoins = async () => {
-  const matchSelect = `
-    *,
-    home_team:teams!home_team_id(id, name, logo_url, short_name),
-    away_team:teams!away_team_id(id, name, logo_url, short_name)
-  `
+  const simpleResponse = await supabase.from('matches').select('*')
+  if (!simpleResponse.error) return simpleResponse
 
-  const firstResponse = await supabase.from('matches').select(matchSelect).order('created_at', { ascending: false })
-  if (!firstResponse.error) return firstResponse
-
-  if (!['42P01', '42703', '42501', '404', 'PGRST200'].includes(firstResponse.error.code ?? '')) {
-    return firstResponse
-  }
-
-  const fallbackResponse = await supabase.from('matches').select(matchSelect)
-  if (!fallbackResponse.error) return fallbackResponse
-
-  if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(fallbackResponse.error.code ?? '')) {
+  if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(simpleResponse.error.code ?? '')) {
     return { data: [], error: null } as { data: any[]; error: null }
   }
 
-  return fallbackResponse
+  return simpleResponse
 }
 
 const loadPasswordResetRequests = async () => {
