@@ -123,8 +123,8 @@ export interface MatchEvent {
   id: string
   type: 'goal' | 'yellow' | 'red' | 'substitution'
   minute: number
-  teamId: string
-  playerId: string
+  teamId: string | null
+  playerId: string | null
   description: string
 }
 

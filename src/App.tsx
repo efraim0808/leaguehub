@@ -1275,6 +1275,8 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
 
     for (const match of completedMatches) {
       for (const event of match.events ?? []) {
+        if (!event.playerId || !event.teamId) continue
+
         const person = playerTeamMap.get(event.playerId)
         if (!person) continue
 
@@ -2061,7 +2063,13 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     ? candidateMatches.find((match) => match.fixtureId === selectedFixtureDetailId || match.id === selectedFixtureDetailId) ?? null
     : null
   const allPlayersAcrossTeams = safeTeams.flatMap((team) => team.players ?? [])
-  const getPlayerNameById = (playerId: string) => allPlayersAcrossTeams.find((player) => player.id === playerId)?.name ?? 'Bilinmeyen oyuncu'
+  const getPlayerNameById = (playerId: string | null | undefined) => {
+    if (!playerId || typeof playerId !== 'string' || playerId.trim() === '') {
+      return 'Bilinmeyen oyuncu'
+    }
+
+    return allPlayersAcrossTeams.find((player) => player.id === playerId)?.name ?? 'Bilinmeyen oyuncu'
+  }
   const matchEventsForSelectedFixture = selectedFixtureMatch
     ? ((selectedFixtureMatch.events ?? []).length > 0
       ? selectedFixtureMatch.events
@@ -2098,10 +2106,10 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
           id: crypto.randomUUID(),
           type: resolved.type,
           minute: resolved.minute,
-          teamId: resolved.teamId,
-          playerId: resolved.playerId,
+          teamId: resolved.teamId ?? null,
+          playerId: resolved.playerId ?? null,
           description: resolved.description.trim() || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
-        },
+        } satisfies MatchEvent,
       ],
     }
 
@@ -2389,14 +2397,14 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
   }
 
   const handleAddEvent = async (match: Match) => {
-    const current = eventDraft.matchId === match.id ? eventDraft : { ...eventDraft, matchId: match.id, teamId: match.homeTeamId, playerId: match.homeTeamId ? safeTeams.find((team) => team.id === match.homeTeamId)?.players?.[0]?.id ?? '' : '', mvpPlayerId: '' }
+    const current = eventDraft.matchId === match.id ? eventDraft : { ...eventDraft, matchId: match.id, teamId: '', playerId: '', mvpPlayerId: '' }
     const resolved = resolveMatchEventSelection(match, safeTeams, current)
     const event: MatchEvent = {
       id: crypto.randomUUID(),
       type: resolved.type,
       minute: resolved.minute,
-      teamId: resolved.teamId,
-      playerId: resolved.playerId,
+      teamId: resolved.teamId ?? null,
+      playerId: resolved.playerId ?? null,
       description: resolved.description || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
     }
     const nextMatch = { ...match, events: [...match.events, event] }
@@ -2493,7 +2501,11 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
     }
   }
 
-  const getPlayerNameById = (playerId: string) => {
+  const getPlayerNameById = (playerId: string | null | undefined) => {
+    if (!playerId || typeof playerId !== 'string' || playerId.trim() === '') {
+      return 'Bilinmeyen oyuncu'
+    }
+
     return allPlayers.find((player) => player.id === playerId)?.name ?? 'Bilinmeyen oyuncu'
   }
 
@@ -2599,12 +2611,14 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
                   <option value="substitution">Oyuncu Değişikliği</option>
                 </select>
                 <input type="number" min={0} max={120} value={eventDraft.minute || ''} onChange={(event) => setEventDraft({ ...eventDraft, minute: Number(event.target.value) || 0 })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white" placeholder="Dakika" />
-                <select value={eventDraft.teamId || selectedMatch.homeTeamId} onChange={(event) => setEventDraft({ ...eventDraft, teamId: event.target.value })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+                <select value={eventDraft.teamId ?? ''} onChange={(event) => setEventDraft({ ...eventDraft, teamId: event.target.value })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+                  <option value="">Takım seçimi</option>
                   <option value={selectedMatch.homeTeamId}>{home?.name}</option>
                   <option value={selectedMatch.awayTeamId}>{away?.name}</option>
                 </select>
-                <select value={eventDraft.playerId} onChange={(event) => setEventDraft({ ...eventDraft, playerId: event.target.value })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
-                  {(eventDraft.teamId === selectedMatch.homeTeamId ? homePlayers : awayPlayers).map((player) => (
+                <select value={eventDraft.playerId ?? ''} onChange={(event) => setEventDraft({ ...eventDraft, playerId: event.target.value })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+                  <option value="">Oyuncu seçimi</option>
+                  {((eventDraft.teamId === selectedMatch.homeTeamId ? homePlayers : eventDraft.teamId === selectedMatch.awayTeamId ? awayPlayers : [])).map((player) => (
                     <option key={player.id} value={player.id}>{player.name}</option>
                   ))}
                 </select>

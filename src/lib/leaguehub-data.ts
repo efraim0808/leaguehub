@@ -918,8 +918,8 @@ export interface MatchStatisticRow {
   id: string
   tournamentId: string
   matchId: string
-  teamId: string
-  playerId: string
+  teamId: string | null
+  playerId: string | null
   playerName: string
   goals: number
   yellowCards: number
@@ -936,6 +936,8 @@ export const buildMatchStatistics = (
   const rows = new Map<string, MatchStatisticRow>()
 
   for (const event of match.events) {
+    if (!event.teamId || !event.playerId) continue
+
     const key = `${event.teamId}:${event.playerId}`
     const existing = rows.get(key) ?? {
       id: `${match.id}-${event.teamId}-${event.playerId}`,
