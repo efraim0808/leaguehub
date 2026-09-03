@@ -360,6 +360,8 @@ export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>)
   const safePayload = { ...payload }
   delete safePayload.player_name
   delete safePayload.playerName
+  delete safePayload.substitutions
+  delete safePayload.substitution
   delete safePayload.created_at
   delete safePayload.createdAt
 
@@ -372,7 +374,6 @@ export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>)
     'goals',
     'yellow_cards',
     'red_cards',
-    'substitutions',
   ])
 
   return Object.entries(safePayload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
@@ -1662,7 +1663,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           goals: stat.goals,
           yellow_cards: stat.yellowCards,
           red_cards: stat.redCards,
-          substitutions: stat.substitutions,
           created_at: new Date().toISOString(),
         }))
 

@@ -370,9 +370,9 @@ describe('LeagueHub – full integration scenarios', () => {
       goals: 2,
       yellow_cards: 1,
       red_cards: 0,
-      substitutions: 1,
     })
     expect(statsPayload).not.toHaveProperty('player_name')
+    expect(statsPayload).not.toHaveProperty('substitutions')
     expect(statsPayload).not.toHaveProperty('extra_field')
 
     const userPayload = sanitizeUserPayload({
