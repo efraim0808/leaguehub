@@ -102,17 +102,14 @@ export const sanitizeMatchEventPayload = (payload: Record<string, unknown>) => {
       return accumulator
     }
 
-    const normalizedValue = uuidKeys.has(key)
-      ? normalizeSingleUuidValue(value)
-      : value
-
-    if (normalizedValue === null) {
-      accumulator[key] = null
+    if (uuidKeys.has(key)) {
+      const normalizedValue = normalizeSingleUuidValue(value)
+      accumulator[key] = normalizedValue
       return accumulator
     }
 
-    if (normalizedValue !== null) {
-      accumulator[key] = normalizedValue
+    if (value !== null && value !== '') {
+      accumulator[key] = value
     }
 
     return accumulator

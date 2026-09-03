@@ -179,12 +179,13 @@ export const resolveMatchEventSelection = (
   const homePlayers = filterSelectablePlayers(homeTeam?.players ?? [])
   const awayPlayers = filterSelectablePlayers(awayTeam?.players ?? [])
   const validTeamIds = new Set([match.homeTeamId, match.awayTeamId].filter(Boolean))
-  const selectedTeamId = draft.teamId && validTeamIds.has(draft.teamId) ? draft.teamId : match.homeTeamId
-  const teamPlayers = selectedTeamId === match.homeTeamId ? homePlayers : awayPlayers
-  const fallbackPlayerId = teamPlayers[0]?.id ?? homePlayers[0]?.id ?? awayPlayers[0]?.id ?? ''
-  const playerId = draft.playerId && teamPlayers.some((player) => player.id === draft.playerId)
-    ? draft.playerId
-    : fallbackPlayerId
+
+  const hasSelectedTeam = typeof draft.teamId === 'string' && draft.teamId.trim() !== '' && validTeamIds.has(draft.teamId)
+  const selectedTeamId = hasSelectedTeam ? draft.teamId : null
+  const teamPlayers = selectedTeamId === match.homeTeamId ? homePlayers : selectedTeamId === match.awayTeamId ? awayPlayers : []
+
+  const hasSelectedPlayer = typeof draft.playerId === 'string' && draft.playerId.trim() !== '' && teamPlayers.some((player) => player.id === draft.playerId)
+  const playerId = hasSelectedPlayer ? draft.playerId : null
 
   const numericMinute = Number(draft.minute ?? 0)
   const safeMinute = Number.isFinite(numericMinute) ? Math.max(0, Math.min(120, Math.floor(Math.abs(numericMinute)))) : 0

@@ -926,7 +926,7 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(suspended.players.find((player) => player.id === addedPlayer.id)?.isSuspended).toBe(true)
   })
 
-  it('falls back to a valid team and player when the live match event form is incomplete', () => {
+  it('keeps blank live event IDs as null instead of auto-filling a player', () => {
     const teams = [{
       id: 'team-home',
       name: 'Galatasaray',
@@ -978,8 +978,8 @@ describe('LeagueHub – full integration scenarios', () => {
 
     const selection = resolveMatchEventSelection(match, teams, { teamId: '', playerId: '', minute: '', type: 'goal', description: '' })
 
-    expect(selection.teamId).toBe('team-home')
-    expect(selection.playerId).toBe('player-home-1')
+    expect(selection.teamId).toBeNull()
+    expect(selection.playerId).toBeNull()
     expect(selection.minute).toBe(0)
   })
 
