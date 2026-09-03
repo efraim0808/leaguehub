@@ -2940,7 +2940,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   sponsors: SponsorRecord[]
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
-  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, resolvePasswordResetRequest, setSession, addPlayerToTeam, refreshData } = useAppContext()
+  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, resolvePasswordResetRequest, addPlayerToTeam, refreshData } = useAppContext()
   const [requestSent, setRequestSent] = useState(false)
   const [newPlayerForm, setNewPlayerForm] = useState({
     teamId: '',
@@ -3647,9 +3647,10 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   const isTournamentEditorValid = Boolean(tournamentEditor && tournamentEditor.name.trim().length > 0)
   const handleUserRoleChange = async (userId: string, nextRole: Role) => {
     try {
-      const { error } = await supabase.from('users').update({
-        role: nextRole,
-      }).eq('id', userId)
+      const { error } = await supabase
+        .from('users')
+        .update({ role: nextRole })
+        .eq('id', userId)
 
       if (error) {
         console.error('User role update failed:', error)
@@ -3657,80 +3658,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         return
       }
 
-      const { data: existingRoleRequest, error: existingRoleRequestError } = await supabase
-        .from('role_requests')
-        .select('id')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-
-      if (existingRoleRequestError && existingRoleRequestError.code !== 'PGRST116') {
-        console.warn('Role request lookup warning:', existingRoleRequestError)
-      }
-
-      if (existingRoleRequest?.id) {
-        const roleRequestSync = await supabase.from('role_requests').update({
-          status: 'Onaylandı',
-        }).eq('id', existingRoleRequest.id)
-
-        if (roleRequestSync.error) {
-          console.warn('Role request status sync warning:', roleRequestSync.error)
-        }
-      } else {
-        const roleRequestInsert = await supabase.from('role_requests').insert({
-          user_id: userId,
-          requested_role: nextRole,
-          status: 'Onaylandı',
-          created_at: new Date().toISOString(),
-        })
-
-        if (roleRequestInsert.error) {
-          console.warn('Role request insert sync warning:', roleRequestInsert.error)
-        }
-      }
-
-      await updateAppState({
-        ...appState,
-        users: appState.users.map((user) =>
-          user.id === userId
-            ? {
-                ...user,
-                role: nextRole,
-                teamManagerRequest: nextRole === 'Team Manager' ? false : user.teamManagerRequest,
-                permissions: nextRole === 'Team Manager'
-                  ? {
-                      ...user.permissions,
-                      canliSkor: false,
-                      takimYonetimi: false,
-                    }
-                  : nextRole === 'Admin' || nextRole === 'Super Admin'
-                    ? {
-                        fikstur: true,
-                        puanDurumu: true,
-                        canliSkor: true,
-                        disiplin: true,
-                        takimOnaylari: true,
-                        takimYonetimi: true,
-                        galeri: true,
-                        duyurular: true,
-                        ayarlar: true,
-                      }
-                    : user.permissions,
-              }
-            : user,
-        ),
-      })
-
       await refreshData()
       window.alert('Seçim onaylanmıştır')
-
-      if (currentUser && currentUser.id === userId) {
-        setSession({
-          ...currentUser,
-          role: nextRole,
-        })
-      }
     } catch (error: any) {
       console.error('User role update failed:', error)
       window.alert('Rol güncellenirken hata oluştu: ' + (error?.message ?? 'Bilinmeyen hata'))
