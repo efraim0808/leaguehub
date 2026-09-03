@@ -45,15 +45,6 @@ const navItems = [
   { to: '/profile', label: 'Profilim', icon: UserRound },
 ]
 
-const teamManagerPermissionList = ['oyuncu_ekleme', 'turnuva_basvurusu', 'izleme'] as const
-const adminPermissionList = ['Tüm modüller'] as const
-
-const getRolePermissionList = (role: Role): string[] => {
-  if (role === 'Team Manager') return [...teamManagerPermissionList]
-  if (role === 'Super Admin' || role === 'Admin') return [...adminPermissionList]
-  return []
-}
-
 export type SponsorRecord = {
   id: string
   name: string
@@ -398,9 +389,11 @@ function AuthScreen() {
     <div className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
       <div className="glass-panel mx-auto max-w-md rounded-[30px] p-5">
         <div className="mb-6 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-400 to-emerald-400 text-slate-950 shadow-lg shadow-cyan-500/20">
-            <Trophy size={28} strokeWidth={2.2} />
-          </div>
+          <img
+            src="/logo.png"
+            alt="LeagueHub Logo"
+            className="mx-auto mb-4 h-20 w-20 object-contain"
+          />
           <h1 className="mt-4 text-2xl font-black tracking-tight text-white">LeagueHub</h1>
           <p className="mt-1 text-sm text-slate-400">Turnuva Yönetim Sistemi</p>
         </div>
@@ -3654,10 +3647,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   const isTournamentEditorValid = Boolean(tournamentEditor && tournamentEditor.name.trim().length > 0)
   const handleUserRoleChange = async (userId: string, nextRole: Role) => {
     try {
-      const nextPermissionList = getRolePermissionList(nextRole)
       const { error } = await supabase.from('users').update({
         role: nextRole,
-        permissions: nextPermissionList,
       }).eq('id', userId)
 
       if (error) {

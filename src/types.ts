@@ -1,4 +1,4 @@
-export type Role = 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor'
+export type Role = 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor' | 'USER'
 
 export type TournamentStatus = 'Kayıt Açık' | 'Turnuva Başladı' | 'Turnuva Bitti'
 

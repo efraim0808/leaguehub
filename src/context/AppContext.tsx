@@ -58,7 +58,7 @@ const defaultPermissions: PermissionSet = {
 export const TEAM_MANAGER_PERMISSION_LIST = ['oyuncu_ekleme', 'turnuva_basvurusu', 'izleme'] as const
 export const ADMIN_PERMISSION_LIST = ['Tüm modüller'] as const
 
-export const getRolePermissionList = (role: 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor'): string[] => {
+export const getRolePermissionList = (role: 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor' | 'USER'): string[] => {
   if (role === 'Team Manager') return [...TEAM_MANAGER_PERMISSION_LIST]
   if (role === 'Super Admin' || role === 'Admin') return [...ADMIN_PERMISSION_LIST]
   return []
@@ -399,7 +399,7 @@ const mapUserRow = (row: any): User => ({
   email: row.email ?? '',
   password: row.password ?? '',
   username: row.username ?? (row.name ?? row.full_name ?? '').replace(/\s+/g, '').toUpperCase() ?? '',
-  role: row.role ?? 'Visitor',
+  role: row.role ?? 'USER',
   isActive: row.is_active ?? true,
   kvkkAccepted: row.kvkk_accepted ?? false,
   phone: row.phone ?? '',
@@ -919,7 +919,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           id: userRecord?.id ?? authSession.user.id,
           fullName: userRecord?.full_name ?? userRecord?.name ?? authSession.user.user_metadata?.full_name ?? authSession.user.email?.split('@')[0] ?? 'User',
           email: userRecord?.email ?? authSession.user.email ?? '',
-          role: userRecord?.role ?? 'Visitor',
+          role: userRecord?.role ?? 'USER',
           teamId: userRecord?.team_id ?? undefined,
           username: userRecord?.username ?? authSession.user.user_metadata?.username ?? (userRecord?.full_name ?? userRecord?.name ?? authSession.user.email ?? '').split('@')[0].toUpperCase(),
         }
@@ -1005,7 +1005,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: safeUserRecord.id,
       fullName: safeUserRecord.name ?? safeUserRecord.username ?? exactUsername,
       email: safeUserRecord.email ?? '',
-      role: (safeUserRecord.role as SessionUser['role']) ?? 'Visitor',
+      role: (safeUserRecord.role as SessionUser['role']) ?? 'USER',
       teamId: safeUserRecord.team_id ?? undefined,
       username: safeUserRecord.username ?? exactUsername,
     })
@@ -1101,7 +1101,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       id: userId,
       fullName: resolvedFullName,
       email: generatedEmail,
-      role: 'Visitor',
+      role: 'USER',
       username,
     })
 
