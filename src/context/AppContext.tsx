@@ -1955,7 +1955,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const requestUpdate = await supabase.from('role_requests').update({
         status: 'Onaylandı',
-        reviewed_at: new Date().toISOString(),
       }).eq('user_id', userId).select()
 
       if (requestUpdate.error) {
@@ -2000,7 +1999,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const requestUpdate = await supabase.from('role_requests').update({
         status: 'Reddedildi',
-        reviewed_at: new Date().toISOString(),
       }).eq('user_id', userId).select()
 
       if (requestUpdate.error) {

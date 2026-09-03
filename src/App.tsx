@@ -2945,7 +2945,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   sponsors: SponsorRecord[]
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
-  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, resolvePasswordResetRequest, setSession, addPlayerToTeam } = useAppContext()
+  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, resolvePasswordResetRequest, setSession, addPlayerToTeam, refreshData } = useAppContext()
   const [requestSent, setRequestSent] = useState(false)
   const [newPlayerForm, setNewPlayerForm] = useState({
     teamId: '',
@@ -3679,7 +3679,6 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       if (existingRoleRequest?.id) {
         const roleRequestSync = await supabase.from('role_requests').update({
           status: 'Onaylandı',
-          reviewed_at: new Date().toISOString(),
         }).eq('id', existingRoleRequest.id)
 
         if (roleRequestSync.error) {
@@ -3691,7 +3690,6 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
           requested_role: nextRole,
           status: 'Onaylandı',
           created_at: new Date().toISOString(),
-          reviewed_at: new Date().toISOString(),
         })
 
         if (roleRequestInsert.error) {
@@ -3731,7 +3729,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         ),
       })
 
-      window.alert('Kullanıcı rolü başarıyla güncellendi!')
+      await refreshData()
+      window.alert('Seçim onaylanmıştır')
 
       if (currentUser && currentUser.id === userId) {
         setSession({
@@ -4461,7 +4460,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         </div>
       ) : null}
 
-      {currentUser && !['admin', 'super admin', 'süper admin', 'yönetici', 'yonetici'].includes(normalizeRole(currentUser.role)) ? (
+      {currentUser && normalizeRole(currentUser.role) === 'user' ? (
         <div className="rounded-[28px] border border-cyan-500/30 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,1))] p-4 shadow-[0_18px_40px_rgba(34,211,238,0.12)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
