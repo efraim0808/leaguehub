@@ -1235,10 +1235,6 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
     }
   }, [fixtureWeeks, selectedFixtureWeek])
 
-  const activeFixtureWeekIndex = fixtureWeeks.findIndex((week) => week.label === selectedFixtureWeek)
-  const fallbackFixtureWeekIndex = activeFixtureWeekIndex >= 0 ? activeFixtureWeekIndex : 0
-  const activeFixtureWeek = fixtureWeeks[fallbackFixtureWeekIndex] ?? fixtureWeeks[0]
-
   const [activeStatsTab, setActiveStatsTab] = useState<'goals' | 'golden-glove' | 'mvp'>('goals')
 
   const statLeaderboards = useMemo(() => {
@@ -2037,9 +2033,6 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     }
   }, [fixtureWeeks])
 
-  const activeWeekIndex = fixtureWeeks.findIndex((week) => week.label === selectedWeek)
-  const fallbackWeekIndex = activeWeekIndex >= 0 ? activeWeekIndex : 0
-  const activeWeek = fixtureWeeks[fallbackWeekIndex] ?? fixtureWeeks[0]
   const candidateMatches = directMatches.length > 0 ? directMatches : matches
   const selectedFixtureMatch = selectedFixtureDetailId
     ? candidateMatches.find((match) => match.fixtureId === selectedFixtureDetailId || match.id === selectedFixtureDetailId) ?? null
