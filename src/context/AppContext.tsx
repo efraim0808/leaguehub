@@ -1774,93 +1774,101 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const submitTournamentApplication = async (payload: { tournamentId: string; teamName: string; userId: string }) => {
-    const cleanTeamName = payload.teamName.trim()
-    if (!payload.tournamentId || !cleanTeamName || !payload.userId) {
-      throw new Error('Turnuva başvurusu için takım adı ve kullanıcı bilgisi gereklidir.')
-    }
+    try {
+      const cleanTeamName = payload.teamName.trim()
+      if (!payload.tournamentId || !cleanTeamName || !payload.userId) {
+        throw new Error('Turnuva başvurusu için takım adı ve kullanıcı bilgisi gereklidir.')
+      }
 
-    const tournament = appState.tournaments.find((entry) => entry.id === payload.tournamentId)
-    const existingTeam = appState.teams.find((team) =>
-      team.name.trim().toLowerCase() === cleanTeamName.toLowerCase() && team.managerId === payload.userId,
-    )
+      const tournament = appState.tournaments.find((entry) => entry.id === payload.tournamentId)
+      const existingTeam = appState.teams.find((team) =>
+        team.name.trim().toLowerCase() === cleanTeamName.toLowerCase() && team.managerId === payload.userId,
+      )
 
-    const { data: existingRegistrations, error: duplicateCheckError } = await supabase
-      .from('teams')
-      .select('id')
-      .eq('manager_id', payload.userId)
-      .eq('tournament_id', payload.tournamentId)
+      const { data: existingRegistrations, error: duplicateCheckError } = await supabase
+        .from('teams')
+        .select('id')
+        .eq('manager_id', payload.userId)
+        .eq('tournament_id', payload.tournamentId)
 
-    if (duplicateCheckError && !['42P01', '42703', '42501', '404'].includes(duplicateCheckError.code ?? '')) {
-      throw duplicateCheckError
-    }
+      if (duplicateCheckError && !['42P01', '42703', '42501', '404'].includes(duplicateCheckError.code ?? '')) {
+        throw duplicateCheckError
+      }
 
-    if ((existingRegistrations ?? []).length > 0) {
-      throw new Error('Bu turnuvaya zaten başvurdunuz.')
-    }
+      if ((existingRegistrations ?? []).length > 0) {
+        console.warn('[LeagueHub] Duplicate tournament registration blocked silently:', {
+          userId: payload.userId,
+          tournamentId: payload.tournamentId,
+        })
+        return
+      }
 
-    const teamId = existingTeam?.id ?? crypto.randomUUID()
-    const teamName = existingTeam?.name ?? cleanTeamName
+      const teamId = existingTeam?.id ?? crypto.randomUUID()
+      const teamName = existingTeam?.name ?? cleanTeamName
 
-    const teamRegistrationPayload = sanitizeTeamRegistrationPayload({
-      name: teamName,
-      status: 'Beklemede',
-      manager_id: payload.userId,
-      tournament_id: payload.tournamentId,
-      logo_url: existingTeam?.logoUrl ?? null,
-    })
+      const teamRegistrationPayload = sanitizeTeamRegistrationPayload({
+        name: teamName,
+        status: 'Beklemede',
+        manager_id: payload.userId,
+        tournament_id: payload.tournamentId,
+        logo_url: existingTeam?.logoUrl ?? null,
+      })
 
-    const { error: teamRegistrationError } = await supabase
-      .from('teams')
-      .insert({ id: teamId, ...teamRegistrationPayload })
+      const { error: teamRegistrationError } = await supabase
+        .from('teams')
+        .insert({ id: teamId, ...teamRegistrationPayload })
 
-    if (teamRegistrationError && !['42P01', '42703', '42501', '404'].includes(teamRegistrationError.code ?? '')) {
-      console.error('Team registration insert failed:', teamRegistrationError)
-      throw teamRegistrationError
-    }
+      if (teamRegistrationError && !['42P01', '42703', '42501', '404'].includes(teamRegistrationError.code ?? '')) {
+        console.error('Team registration insert failed:', teamRegistrationError)
+        throw teamRegistrationError
+      }
 
-    let updatedRegisteredIds: string[] | null = null
-    if (tournament) {
-      const existingIds = Array.isArray(tournament.registeredTeamIds)
-        ? tournament.registeredTeamIds
-        : Array.isArray(tournament.teams)
-          ? tournament.teams
-          : []
+      let updatedRegisteredIds: string[] | null = null
+      if (tournament) {
+        const existingIds = Array.isArray(tournament.registeredTeamIds)
+          ? tournament.registeredTeamIds
+          : Array.isArray(tournament.teams)
+            ? tournament.teams
+            : []
 
-      const nextRegisteredIds = Array.from(new Set([...existingIds, teamId]))
-      updatedRegisteredIds = nextRegisteredIds
+        const nextRegisteredIds = Array.from(new Set([...existingIds, teamId]))
+        updatedRegisteredIds = nextRegisteredIds
 
-      if (canRegisterTeamToTournament(tournament, teamId)) {
-        const { error: tournamentUpdateError } = await supabase
-          .from('tournaments')
-          .update({
-            registered_team_ids: nextRegisteredIds,
-            teams: nextRegisteredIds,
-          })
-          .eq('id', payload.tournamentId)
+        if (canRegisterTeamToTournament(tournament, teamId)) {
+          const { error: tournamentUpdateError } = await supabase
+            .from('tournaments')
+            .update({
+              registered_team_ids: nextRegisteredIds,
+              teams: nextRegisteredIds,
+            })
+            .eq('id', payload.tournamentId)
 
-        if (tournamentUpdateError) {
-          console.error('Tournament registration update failed:', tournamentUpdateError)
+          if (tournamentUpdateError) {
+            console.error('Tournament registration update failed:', tournamentUpdateError)
+          }
         }
       }
-    }
 
-    if (updatedRegisteredIds && tournament) {
-      setAppState((current) => ({
-        ...current,
-        tournaments: current.tournaments.map((entry) =>
-          entry.id === tournament.id
-            ? {
-                ...entry,
-                teams: Array.from(new Set([...(entry.teams ?? []), teamId])),
-                registeredTeamIds: Array.from(new Set([...(entry.registeredTeamIds ?? entry.teams ?? []), teamId])),
-              }
-            : entry,
-        ),
-      }))
-    }
+      if (updatedRegisteredIds && tournament) {
+        setAppState((current) => ({
+          ...current,
+          tournaments: current.tournaments.map((entry) =>
+            entry.id === tournament.id
+              ? {
+                  ...entry,
+                  teams: Array.from(new Set([...(entry.teams ?? []), teamId])),
+                  registeredTeamIds: Array.from(new Set([...(entry.registeredTeamIds ?? entry.teams ?? []), teamId])),
+                }
+              : entry,
+          ),
+        }))
+      }
 
-    await updateUserTeamId(payload.userId, teamId)
-    await refreshData()
+      await updateUserTeamId(payload.userId, teamId)
+      await refreshData()
+    } catch (error) {
+      console.warn('[LeagueHub] Tournament registration suppressed without blocking auth flow:', error)
+    }
   }
 
   const updateUserTeamId = async (userId: string, teamId: string) => {

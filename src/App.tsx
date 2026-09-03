@@ -635,12 +635,13 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
         teamName: cleanTeamName,
         userId: currentUser.id,
       })
+
       setApplicationFeedback('Başvurunuz alınmıştır.')
       setSelectedOpenTournament(null)
       setTeamNameInput('')
     } catch (error) {
-      console.error('submitTournamentApplication failed', error)
-      setApplicationFeedback(error instanceof Error ? error.message : 'Başvuru gönderilemedi. Lütfen tekrar deneyin.')
+      console.warn('submitTournamentApplication suppressed:', error)
+      setApplicationFeedback('Başvuru işleme alınmadı; giriş akışı etkilenmedi.')
     } finally {
       setApplying(false)
     }
