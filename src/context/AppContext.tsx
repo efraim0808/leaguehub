@@ -364,14 +364,16 @@ export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>)
   delete safePayload.playerName
   delete safePayload.substitutions
   delete safePayload.substitution
+  delete safePayload.team_id
+  delete safePayload.teamId
+  delete safePayload.tournament_id
+  delete safePayload.tournamentId
   delete safePayload.created_at
   delete safePayload.createdAt
 
   const allowedKeys = new Set([
     'id',
-    'tournament_id',
     'match_id',
-    'team_id',
     'player_id',
     'goals',
     'yellow_cards',
@@ -1658,9 +1660,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (stats.length > 0) {
         const playerStatRows = stats.map((stat) => sanitizeMatchStatisticsPayload({
           id: stat.id,
-          tournament_id: tournament?.id ?? match.fixtureId,
           match_id: stat.matchId,
-          team_id: stat.teamId,
           player_id: stat.playerId,
           goals: stat.goals,
           yellow_cards: stat.yellowCards,

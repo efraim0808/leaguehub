@@ -384,14 +384,14 @@ describe('LeagueHub – full integration scenarios', () => {
 
     expect(statsPayload).toMatchObject({
       id: 'stat-1',
-      tournament_id: 't-1',
       match_id: 'match-1',
-      team_id: 'team-1',
       player_id: 'player-1',
       goals: 2,
       yellow_cards: 1,
       red_cards: 0,
     })
+    expect(statsPayload).not.toHaveProperty('tournament_id')
+    expect(statsPayload).not.toHaveProperty('team_id')
     expect(statsPayload).not.toHaveProperty('player_name')
     expect(statsPayload).not.toHaveProperty('substitutions')
     expect(statsPayload).not.toHaveProperty('extra_field')
