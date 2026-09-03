@@ -271,9 +271,11 @@ function AppShell() {
       <header className="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-emerald-400 text-slate-950 font-black shadow-lg shadow-cyan-500/20">
-              L
-            </div>
+            <img
+              src="/logo.png"
+              alt="LeagueHub Logo"
+              className="h-10 w-10 rounded-lg object-contain"
+            />
             <div>
               <div className="text-xs uppercase tracking-[0.3em] text-cyan-300">LeagueHub</div>
               <div className="text-sm font-semibold text-white">Turnuva Yönetimi</div>
