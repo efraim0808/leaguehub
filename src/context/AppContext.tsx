@@ -582,17 +582,41 @@ const selectTableWithFallback = async (table: string, select = '*', dateColumns:
   for (const column of dateColumns) {
     const response = await baseQuery.order(column, { ascending: false })
     if (!response.error) return response
-    if (!['42P01', '42703', '42501', '404'].includes(response.error.code ?? '')) return response
+    if (!['42P01', '42703', '42501', '404', 'PGRST200'].includes(response.error.code ?? '')) return response
   }
 
   const noOrderResponse = await supabase.from(table).select(select)
   if (!noOrderResponse.error) return noOrderResponse
 
-  if (['42P01', '42703', '42501', '404'].includes(noOrderResponse.error.code ?? '')) {
+  if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(noOrderResponse.error.code ?? '')) {
     return { data: [], error: null } as { data: any[]; error: null }
   }
 
   return noOrderResponse
+}
+
+const selectMatchesWithTeamJoins = async () => {
+  const matchSelect = `
+    *,
+    home_team:teams!home_team_id(id, name, logo_url, short_name),
+    away_team:teams!away_team_id(id, name, logo_url, short_name)
+  `
+
+  const firstResponse = await supabase.from('matches').select(matchSelect).order('created_at', { ascending: false })
+  if (!firstResponse.error) return firstResponse
+
+  if (!['42P01', '42703', '42501', '404', 'PGRST200'].includes(firstResponse.error.code ?? '')) {
+    return firstResponse
+  }
+
+  const fallbackResponse = await supabase.from('matches').select(matchSelect)
+  if (!fallbackResponse.error) return fallbackResponse
+
+  if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(fallbackResponse.error.code ?? '')) {
+    return { data: [], error: null } as { data: any[]; error: null }
+  }
+
+  return fallbackResponse
 }
 
 const loadPasswordResetRequests = async () => {
@@ -664,7 +688,7 @@ const loadAppState = async (): Promise<AppState> => {
       selectTableWithFallback('teams', '*', ['created_at', 'updated_at']),
       selectTableWithFallback('players', '*', ['created_at', 'updated_at']),
       selectTableWithFallback('tournaments', '*', ['created_at', 'updated_at']),
-      selectTableWithFallback('matches', '*', ['created_at', 'updated_at']),
+      selectMatchesWithTeamJoins(),
       selectTableWithFallback('match_events', '*', ['minute', 'created_at']),
       selectTableWithFallback('announcements', '*', ['created_at', 'published_at']),
       selectTableWithFallback('gallery_items', '*', ['created_at', 'published_at']),
