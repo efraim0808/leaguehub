@@ -26,6 +26,8 @@ import type {
   User,
 } from '../types'
 
+export { sanitizeMatchEventPayload } from '../lib/leaguehub-data'
+
 const SESSION_KEY = 'leaguehub-session'
 const LOCAL_FALLBACK_STATE_KEY = 'leaguehub-app-state-fallback'
 const EMPTY_APP_STATE: AppState = {

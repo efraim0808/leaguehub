@@ -44,6 +44,7 @@ import {
   sanitizeDisciplinePatch,
   sanitizeDisciplineRecordPayload,
   sanitizeFixturePayload,
+  sanitizeMatchEventPayload,
   sanitizeMatchPayload,
   sanitizeMatchStatisticsPayload,
   sanitizePlayerPayload,
@@ -346,7 +347,27 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(ordered[0].matchDate).toBe('2026-09-04')
   })
 
-  it('drops stale user/team fields and strips legacy tournament and match columns before database writes', () => {
+  it('normalizes empty UUID fields before writing match events and strips schema-invalid stats columns', () => {
+    const eventPayload = sanitizeMatchEventPayload({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      match_id: '',
+      team_id: 'team-1',
+      player_id: '',
+      type: 'goal',
+      minute: 12,
+      description: 'Gol',
+    })
+
+    expect(eventPayload).toMatchObject({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      team_id: 'team-1',
+      type: 'goal',
+      minute: 12,
+      description: 'Gol',
+    })
+    expect(eventPayload).toHaveProperty('match_id', null)
+    expect(eventPayload).toHaveProperty('player_id', null)
+
     const statsPayload = sanitizeMatchStatisticsPayload({
       id: 'stat-1',
       tournament_id: 't-1',

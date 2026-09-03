@@ -78,10 +78,26 @@ export const sanitizeMatchEventPayload = (payload: Record<string, unknown>) => {
     'created_at',
   ])
 
+  const uuidKeys = new Set(['id', 'match_id', 'team_id', 'player_id'])
+
   return Object.entries(payload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
-    if (allowedKeys.has(key) && value !== undefined && value !== null) {
-      accumulator[key] = value
+    if (!allowedKeys.has(key) || value === undefined) {
+      return accumulator
     }
+
+    const normalizedValue = typeof value === 'string' && value.trim() === '' && uuidKeys.has(key)
+      ? null
+      : value
+
+    if (normalizedValue === null) {
+      accumulator[key] = null
+      return accumulator
+    }
+
+    if (normalizedValue !== null) {
+      accumulator[key] = normalizedValue
+    }
+
     return accumulator
   }, {})
 }
