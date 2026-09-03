@@ -1965,78 +1965,15 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
       return
     }
 
-    let isMounted = true
+    const filteredMatches = (matches ?? []).filter((match) => {
+      if (match.tournamentId === tournament.id) return true
+      if (match.tournamentId) return false
+      if (tournament.teams.length === 0) return Boolean(match.homeTeamId && match.awayTeamId)
+      return tournament.teams.includes(match.homeTeamId) || tournament.teams.includes(match.awayTeamId)
+    })
 
-    const loadTournamentMatches = async () => {
-      const { data, error } = await supabase
-        .from('matches')
-        .select(`
-          *,
-          home_team:teams!home_team_id(id, name, logo_url, short_name),
-          away_team:teams!away_team_id(id, name, logo_url, short_name),
-          match_events(*)
-        `)
-        .eq('tournament_id', tournament.id)
-        .order('match_date', { ascending: true })
-
-      if (!isMounted) return
-
-      if (error) {
-        console.warn('Tournament match load failed:', error)
-        setDirectMatches([])
-        return
-      }
-
-      setDirectMatches((data ?? []).map((row) => {
-        const homeTeamId = row.home_team_id ?? ''
-        const awayTeamId = row.away_team_id ?? ''
-        const homeTeam = Array.isArray(row.home_team) ? row.home_team[0] : row.home_team ?? null
-        const awayTeam = Array.isArray(row.away_team) ? row.away_team[0] : row.away_team ?? null
-        const mappedHome = homeTeam?.name ?? row.home_team_name ?? row.homeTeamName ?? 'Takım'
-        const mappedAway = awayTeam?.name ?? row.away_team_name ?? row.awayTeamName ?? 'Takım'
-        const homeTeamName = mappedHome || homeTeamId || 'Takım'
-        const awayTeamName = mappedAway || awayTeamId || 'Takım'
-        const eventsFromMatch = (Array.isArray(row.match_events) ? row.match_events : []).map((eventRow: any) => ({
-          id: eventRow.id,
-          type: eventRow.type ?? 'goal',
-          minute: Number(eventRow.minute ?? 0),
-          teamId: eventRow.team_id ?? homeTeamId,
-          playerId: eventRow.player_id ?? '',
-          description: eventRow.description ?? '',
-        }))
-
-        return {
-          id: row.id,
-          tournamentId: row.tournament_id ?? undefined,
-          fixtureId: row.fixture_id ?? '',
-          homeTeamId,
-          awayTeamId,
-          homeTeamName,
-          awayTeamName,
-          mappedHome,
-          mappedAway,
-          home_team: homeTeam ? { id: homeTeam.id, name: homeTeam.name, logoUrl: homeTeam.logo_url ?? homeTeam.logoUrl ?? '', shortName: homeTeam.short_name ?? homeTeam.shortName ?? undefined } : { id: homeTeamId, name: homeTeamName },
-          away_team: awayTeam ? { id: awayTeam.id, name: awayTeam.name, logoUrl: awayTeam.logo_url ?? awayTeam.logoUrl ?? '', shortName: awayTeam.short_name ?? awayTeam.shortName ?? undefined } : { id: awayTeamId, name: awayTeamName },
-          home_team_name: homeTeamName,
-          away_team_name: awayTeamName,
-          homeScore: Number(row.home_score ?? 0),
-          awayScore: Number(row.away_score ?? 0),
-          status: row.status ?? 'Başlatıldı',
-          events: eventsFromMatch,
-          mvpPlayerId: row.mvp_player_id ?? undefined,
-          week: row.week ?? undefined,
-          matchDate: row.match_date ?? undefined,
-          matchTime: row.match_time ?? undefined,
-          venue: row.venue ?? undefined,
-        }
-      }))
-    }
-
-    void loadTournamentMatches()
-    return () => {
-      isMounted = false
-    }
-  }, [tournament?.id])
+    setDirectMatches(filteredMatches)
+  }, [matches, tournament])
 
   const fixtureList = useMemo(() => {
     return buildTournamentFixtureRows({
