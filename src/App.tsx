@@ -667,9 +667,9 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
                   Takım Adı
                   <input
                     value={teamNameInput}
-                    onChange={(event) => setTeamNameInput(event.target.value)}
-                    placeholder="Örn: Merkez Sağlık FC"
-                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white outline-none ring-0 placeholder:text-slate-500"
+                    onChange={(event) => setTeamNameInput(event.target.value.toLocaleUpperCase('tr-TR'))}
+                    placeholder="Örn: MERKEZ SAĞLIK FC"
+                    className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white uppercase outline-none ring-0 placeholder:text-slate-500"
                   />
                 </label>
               </div>
