@@ -596,14 +596,53 @@ const selectTableWithFallback = async (table: string, select = '*', dateColumns:
 }
 
 const selectMatchesWithTeamJoins = async () => {
-  const simpleResponse = await supabase.from('matches').select('*')
-  if (!simpleResponse.error) return simpleResponse
+  try {
+    const simpleResponse = await supabase.from('matches').select('*')
+    if (simpleResponse.error) {
+      const error = simpleResponse.error as any
+      console.error('Matches fetch error details:', {
+        code: error?.code,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+      })
 
-  if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(simpleResponse.error.code ?? '')) {
+      if (['42P01', '42703', '42501', '404', 'PGRST200'].includes(error?.code ?? '')) {
+        return { data: [], error: null } as { data: any[]; error: null }
+      }
+
+      return { data: [], error: null } as { data: any[]; error: null }
+    }
+
+    return simpleResponse
+  } catch (error: any) {
+    console.error('Matches fetch error details:', {
+      code: error?.code,
+      message: error?.message,
+      details: error?.details,
+      hint: error?.hint,
+    })
     return { data: [], error: null } as { data: any[]; error: null }
   }
+}
 
-  return simpleResponse
+const safeTableLoad = async <T,>(loader: () => Promise<{ data: T[] | null; error: any }>, fallback: T[] = []): Promise<{ data: T[]; error: null }> => {
+  try {
+    const response = await loader()
+    if (response.error) {
+      console.warn('[LeagueHub] Table load isolated fallback used:', response.error)
+      return { data: fallback, error: null }
+    }
+    return { data: Array.isArray(response.data) ? response.data : fallback, error: null }
+  } catch (error: any) {
+    console.error('[LeagueHub] Table load failed, using safe fallback:', {
+      code: error?.code,
+      message: error?.message,
+      details: error?.details,
+      hint: error?.hint,
+    })
+    return { data: fallback, error: null }
+  }
 }
 
 const loadPasswordResetRequests = async () => {
@@ -671,34 +710,43 @@ const applyDisciplineRecordsToPlayers = (teams: Team[], records: any[] = []): Te
 const loadAppState = async (): Promise<AppState> => {
   try {
     const [usersRes, teamsRes, playersRes, tournamentsRes, matchesRes, matchEventsRes, announcementsRes, galleryRes, messagesRes, passwordResetRequestsRes, disciplineRecordsRes] = await Promise.all([
-      loadUsersSafely(),
-      selectTableWithFallback('teams', '*', ['created_at', 'updated_at']),
-      selectTableWithFallback('players', '*', ['created_at', 'updated_at']),
-      selectTableWithFallback('tournaments', '*', ['created_at', 'updated_at']),
-      selectMatchesWithTeamJoins(),
-      selectTableWithFallback('match_events', '*', ['minute', 'created_at']),
-      selectTableWithFallback('announcements', '*', ['created_at', 'published_at']),
-      selectTableWithFallback('gallery_items', '*', ['created_at', 'published_at']),
-      selectTableWithFallback('messages', '*', ['created_at', 'sent_at']),
-      loadPasswordResetRequests(),
-      selectTableWithFallback('discipline_records', '*', ['created_at']),
+      safeTableLoad(loadUsersSafely, []),
+      safeTableLoad(() => selectTableWithFallback('teams', '*', ['created_at', 'updated_at']), []),
+      safeTableLoad(() => selectTableWithFallback('players', '*', ['created_at', 'updated_at']), []),
+      safeTableLoad(() => selectTableWithFallback('tournaments', '*', ['created_at', 'updated_at']), []),
+      safeTableLoad(selectMatchesWithTeamJoins, []),
+      safeTableLoad(() => selectTableWithFallback('match_events', '*', ['minute', 'created_at']), []),
+      safeTableLoad(() => selectTableWithFallback('announcements', '*', ['created_at', 'published_at']), []),
+      safeTableLoad(() => selectTableWithFallback('gallery_items', '*', ['created_at', 'published_at']), []),
+      safeTableLoad(() => selectTableWithFallback('messages', '*', ['created_at', 'sent_at']), []),
+      safeTableLoad(loadPasswordResetRequests, []),
+      safeTableLoad(() => selectTableWithFallback('discipline_records', '*', ['created_at']), []),
     ])
-    const fixturesRes = await loadFixturesWithFallback()
+    const fixturesRes = await safeTableLoad(loadFixturesWithFallback, [])
 
-    if (usersRes.error && !['42P01', '42703', '42501', '404'].includes(usersRes.error.code ?? '')) {
-      console.warn('[LeagueHub AppState] users query failed, continuing without user records', usersRes.error)
+    if (usersRes.error && !['42P01', '42703', '42501', '404'].includes((usersRes as any).error?.code ?? '')) {
+      console.warn('[LeagueHub AppState] users query failed, continuing without user records', (usersRes as any).error)
     }
-    if (teamsRes.error) throw teamsRes.error
-    if (playersRes.error) throw playersRes.error
-    if (tournamentsRes.error) throw tournamentsRes.error
-    if (fixturesRes.error) throw fixturesRes.error
-    if (matchesRes.error) throw matchesRes.error
-    if (matchEventsRes.error) throw matchEventsRes.error
-    if (announcementsRes.error) throw announcementsRes.error
-    if (galleryRes.error) throw galleryRes.error
-    if (messagesRes.error) throw messagesRes.error
-    if (passwordResetRequestsRes.error && !['42P01', '42703', '42501'].includes(passwordResetRequestsRes.error.code ?? '')) {
-      throw passwordResetRequestsRes.error
+    if (fixturesRes.error) {
+      console.warn('[LeagueHub AppState] fixtures query failed, continuing without fixture rows', fixturesRes.error)
+    }
+    if (matchesRes.error) {
+      console.warn('[LeagueHub AppState] matches query failed, continuing with empty matches state', matchesRes.error)
+    }
+    if (matchEventsRes.error) {
+      console.warn('[LeagueHub AppState] match_events query failed, continuing without events', matchEventsRes.error)
+    }
+    if (announcementsRes.error) {
+      console.warn('[LeagueHub AppState] announcements query failed, continuing without announcements', announcementsRes.error)
+    }
+    if (galleryRes.error) {
+      console.warn('[LeagueHub AppState] gallery query failed, continuing without gallery rows', galleryRes.error)
+    }
+    if (messagesRes.error) {
+      console.warn('[LeagueHub AppState] messages query failed, continuing without messages', messagesRes.error)
+    }
+    if (passwordResetRequestsRes.error && !['42P01', '42703', '42501'].includes((passwordResetRequestsRes as any).error?.code ?? '')) {
+      console.warn('[LeagueHub AppState] password reset request query failed, continuing without reset requests', (passwordResetRequestsRes as any).error)
     }
 
     const playersByTeam = new Map<string, Player[]>()
