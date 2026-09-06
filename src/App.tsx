@@ -2900,6 +2900,20 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     venue: 'Merkez Stadyum',
   })
 
+  const [newTournament, setNewTournament] = useState({
+    name: '',
+    startDate: '2026-09-15',
+    status: 'Kayıt Açık' as Tournament['status'],
+    rules: '',
+    scoring: { win: 3, draw: 1, loss: 0 },
+    yellowCardRule: 2,
+  })
+  const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '' })
+  const [fixtureCustomTime, setFixtureCustomTime] = useState('')
+  const [isCreatingTournament, setIsCreatingTournament] = useState(false)
+  const [tournamentCreateFeedback, setTournamentCreateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [globalToast, setGlobalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   useEffect(() => {
     if (!safeTournaments.length) {
       setFixtureForm((current) => ({ ...current, tournamentId: '' }))
@@ -2924,19 +2938,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
     return () => window.clearTimeout(timeoutId)
   }, [globalToast])
-  const [newTournament, setNewTournament] = useState({
-    name: '',
-    startDate: '2026-09-15',
-    status: 'Kayıt Açık' as Tournament['status'],
-    rules: '',
-    scoring: { win: 3, draw: 1, loss: 0 },
-    yellowCardRule: 2,
-  })
-  const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '' })
-  const [fixtureCustomTime, setFixtureCustomTime] = useState('')
-  const [isCreatingTournament, setIsCreatingTournament] = useState(false)
-  const [tournamentCreateFeedback, setTournamentCreateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
-  const [globalToast, setGlobalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
   const toggleFixtureTime = (time: string) => {
     setFixtureForm((current) => ({
       ...current,
