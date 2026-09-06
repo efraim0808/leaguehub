@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarDays,
   Camera,
+  Check,
   Home,
   Image as ImageIcon,
   LogOut,
@@ -18,6 +19,7 @@ import {
   Trophy,
   UserRound,
   Video,
+  X,
 } from 'lucide-react'
 import { useAppContext } from './context/AppContext'
 import {
@@ -4458,29 +4460,36 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                 </label>
               </div>
 
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setTournamentEditor(null)} className="glass-button-secondary flex-1 rounded-2xl px-4 py-3 font-bold text-slate-200">İptal</button>
+              <div className="grid grid-cols-3 gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setTournamentEditor(null)}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-slate-700 bg-slate-950/70 px-2.5 py-2.5 text-[11px] font-bold text-slate-200 transition hover:border-slate-500 sm:text-xs"
+                >
+                  <X size={14} />
+                  <span>İptal</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => void handleUpdateTournament()}
                   disabled={!canUpdateTournamentForm || !isTournamentEditorValid}
-                  className="glass-button flex-1 rounded-2xl px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-2xl bg-cyan-400 px-2.5 py-2.5 text-[11px] font-black text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50 sm:text-xs"
                 >
-                  Güncelle / Kaydet
+                  <Check size={14} />
+                  <span>Kaydet</span>
                 </button>
-              </div>
 
-              <div className="border-t border-red-500/20 pt-4">
                 <button
                   type="button"
                   onClick={() => void handleDeleteTournament(tournamentEditor.id)}
                   disabled={!canDeleteTournament}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-red-500/40 bg-red-500/10 px-2.5 py-2.5 text-[11px] font-bold text-red-200 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-50 sm:text-xs"
                   aria-label={`${tournamentEditor.name || 'Turnuva'} turnuvasını sil`}
                   title="Turnuva sil"
                 >
-                  <Trash2 size={16} />
-                  <span className="sr-only">Turnuva sil</span>
+                  <Trash2 size={14} />
+                  <span>Sil</span>
                 </button>
               </div>
             </div>
