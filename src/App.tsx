@@ -63,6 +63,11 @@ export const normalizeSponsorRecord = (record: any): SponsorRecord => ({
   createdAt: String(record?.created_at ?? record?.createdAt ?? new Date().toISOString()),
 })
 
+export const resolveTournamentSubmitButtonState = (isSubmitting: boolean) => ({
+  disabled: isSubmitting,
+  label: isSubmitting ? 'Turnuva Oluşturuluyor...' : 'Turnuva Oluştur',
+})
+
 export const buildFixtureRowsFromMatches = (matches: Match[], tournamentId: string, tournamentTeamIds?: string[]): Fixture[] => {
   const allowedTeamIds = new Set((tournamentTeamIds ?? []).filter(Boolean))
 
@@ -2909,6 +2914,16 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       }
     })
   }, [safeTournaments])
+
+  useEffect(() => {
+    if (!globalToast) return
+
+    const timeoutId = window.setTimeout(() => {
+      setGlobalToast(null)
+    }, 3500)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [globalToast])
   const [newTournament, setNewTournament] = useState({
     name: '',
     startDate: '2026-09-15',
@@ -2919,6 +2934,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   })
   const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '' })
   const [fixtureCustomTime, setFixtureCustomTime] = useState('')
+  const [isCreatingTournament, setIsCreatingTournament] = useState(false)
+  const [tournamentCreateFeedback, setTournamentCreateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [globalToast, setGlobalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const toggleFixtureTime = (time: string) => {
     setFixtureForm((current) => ({
       ...current,
@@ -2983,67 +3001,87 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleSaveTournament = async () => {
-    if (!newTournament.name.trim()) return
+    if (!newTournament.name.trim() || isCreatingTournament) return
 
-    const nextTournament: Tournament = createTournamentDraft({
-      id: crypto.randomUUID(),
-      name: newTournament.name,
-      status: newTournament.status,
-      startDate: newTournament.startDate,
-      scoring: {
-        win: Number(newTournament.scoring.win) || 3,
-        draw: Number(newTournament.scoring.draw) || 1,
-        loss: Number(newTournament.scoring.loss) || 0,
-      },
-      rules: newTournament.rules,
-      yellowCardRule: Number(newTournament.yellowCardRule) || 2,
-      teams: safeTeams.map((team) => team.id),
-      fixtures: [],
-    })
+    setIsCreatingTournament(true)
+    setTournamentCreateFeedback(null)
 
-    const winPoints = Number(nextTournament.scoring.win) || 3
-    const drawPoints = Number(nextTournament.scoring.draw) || 1
-    const lossPoints = Number(nextTournament.scoring.loss) || 0
-    const titleValue = nextTournament.name.trim() || 'Turnuva'
+    try {
+      const nextTournament: Tournament = createTournamentDraft({
+        id: crypto.randomUUID(),
+        name: newTournament.name,
+        status: newTournament.status,
+        startDate: newTournament.startDate,
+        scoring: {
+          win: Number(newTournament.scoring.win) || 3,
+          draw: Number(newTournament.scoring.draw) || 1,
+          loss: Number(newTournament.scoring.loss) || 0,
+        },
+        rules: newTournament.rules,
+        yellowCardRule: Number(newTournament.yellowCardRule) || 2,
+        teams: safeTeams.map((team) => team.id),
+        fixtures: [],
+      })
 
-    const tournamentPayload = {
-      id: nextTournament.id,
-      name: titleValue,
-      title: titleValue,
-      status: nextTournament.status,
-      start_date: nextTournament.startDate,
-      rules: nextTournament.rules ?? '',
-      scoring: {
-        win: winPoints,
-        draw: drawPoints,
-        loss: lossPoints,
-      },
-      points_config: {
-        win: winPoints,
-        draw: drawPoints,
-        loss: lossPoints,
-      },
-      win_points: winPoints,
-      draw_points: drawPoints,
-      loss_points: lossPoints,
-      yellow_card_rule: Number(nextTournament.yellowCardRule) || 2,
-      yellow_card_limit: Number(nextTournament.yellowCardRule) || 2,
-      registered_team_ids: Array.isArray(nextTournament.registeredTeamIds) && nextTournament.registeredTeamIds.length
-        ? nextTournament.registeredTeamIds
-        : nextTournament.teams,
-      teams: nextTournament.teams,
+      const winPoints = Number(nextTournament.scoring.win) || 3
+      const drawPoints = Number(nextTournament.scoring.draw) || 1
+      const lossPoints = Number(nextTournament.scoring.loss) || 0
+      const titleValue = nextTournament.name.trim() || 'Turnuva'
+
+      const tournamentPayload = {
+        id: nextTournament.id,
+        name: titleValue,
+        title: titleValue,
+        status: nextTournament.status,
+        start_date: nextTournament.startDate,
+        rules: nextTournament.rules ?? '',
+        scoring: {
+          win: winPoints,
+          draw: drawPoints,
+          loss: lossPoints,
+        },
+        points_config: {
+          win: winPoints,
+          draw: drawPoints,
+          loss: lossPoints,
+        },
+        win_points: winPoints,
+        draw_points: drawPoints,
+        loss_points: lossPoints,
+        yellow_card_rule: Number(nextTournament.yellowCardRule) || 2,
+        yellow_card_limit: Number(nextTournament.yellowCardRule) || 2,
+        registered_team_ids: Array.isArray(nextTournament.registeredTeamIds) && nextTournament.registeredTeamIds.length
+          ? nextTournament.registeredTeamIds
+          : nextTournament.teams,
+        teams: nextTournament.teams,
+      }
+
+      const { error: tournamentInsertError } = await supabase.from('tournaments').insert(tournamentPayload)
+      if (tournamentInsertError) {
+        console.error('Tournament insert failed:', tournamentInsertError)
+        const errorMessage = `Turnuva oluşturulamadı: ${tournamentInsertError.message}`
+        setTournamentCreateFeedback({ type: 'error', message: errorMessage })
+        setGlobalToast({ type: 'error', message: errorMessage })
+        window.alert(errorMessage)
+        return
+      }
+
+      await refreshData()
+      setNewTournament({ name: '', startDate: '2026-09-15', status: 'Kayıt Açık', rules: '', scoring: { win: 3, draw: 1, loss: 0 }, yellowCardRule: 2 })
+      const successMessage = 'Turnuva başarıyla oluşturuldu.'
+      setTournamentCreateFeedback({ type: 'success', message: successMessage })
+      setGlobalToast({ type: 'success', message: successMessage })
+      setAdminModal(null)
+    } catch (error: any) {
+      const message = error?.message ?? 'Turnuva oluşturulurken bilinmeyen bir hata oluştu.'
+      console.error('Tournament save failed:', error)
+      const errorMessage = `Turnuva oluşturulamadı: ${message}`
+      setTournamentCreateFeedback({ type: 'error', message: errorMessage })
+      setGlobalToast({ type: 'error', message: errorMessage })
+      window.alert(errorMessage)
+    } finally {
+      setIsCreatingTournament(false)
     }
-
-    const { error: tournamentInsertError } = await supabase.from('tournaments').insert(tournamentPayload)
-    if (tournamentInsertError) {
-      console.error('Tournament insert failed:', tournamentInsertError)
-      window.alert('Turnuva kaydı başarısız: ' + tournamentInsertError.message)
-      return
-    }
-
-    await updateAppState({ ...appState, tournaments: [nextTournament, ...appState.tournaments] })
-    setNewTournament({ name: '', startDate: '2026-09-15', status: 'Kayıt Açık', rules: '', scoring: { win: 3, draw: 1, loss: 0 }, yellowCardRule: 2 })
-    setAdminModal(null)
   }
 
   const handleUpdateTournament = async () => {
@@ -3650,6 +3688,14 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
   return (
     <div className="space-y-5 pb-28">
+      {globalToast ? (
+        <div className="fixed right-4 top-4 z-[60] max-w-sm rounded-2xl border border-slate-700 bg-slate-900/95 px-4 py-3 shadow-[0_18px_50px_rgba(15,23,42,0.6)] backdrop-blur-sm">
+          <div className={`text-sm font-semibold ${globalToast.type === 'success' ? 'text-emerald-300' : 'text-red-300'}`}>
+            {globalToast.message}
+          </div>
+        </div>
+      ) : null}
+
       <div className="rounded-[28px] border border-slate-800 bg-[linear-gradient(135deg,rgba(15,118,110,0.12),rgba(15,23,42,1)_35%,rgba(15,23,42,1))] p-4 shadow-[0_18px_48px_rgba(14,116,144,0.18)]">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -4537,7 +4583,20 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                       <input type="number" min={0} value={newTournament.yellowCardRule} onChange={(event) => setNewTournament({ ...newTournament, yellowCardRule: Number(event.target.value) })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
                     </label>
                   </div>
-                  <button type="button" onClick={() => void handleSaveTournament()} className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950">Turnuva Oluştur</button>
+                  {tournamentCreateFeedback ? (
+                    <div className={`mb-4 rounded-2xl border px-3 py-2 text-sm ${tournamentCreateFeedback.type === 'success' ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border-red-500/40 bg-red-500/10 text-red-200'}`}>
+                      {tournamentCreateFeedback.message}
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveTournament()}
+                    disabled={isCreatingTournament || !newTournament.name.trim()}
+                    className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950 transition disabled:cursor-not-allowed disabled:opacity-70"
+                  >
+                    {resolveTournamentSubmitButtonState(isCreatingTournament).label}
+                  </button>
 
                   <div className="space-y-3">
                     {safeTournaments.map((tournament) => (

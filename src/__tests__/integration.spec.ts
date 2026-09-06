@@ -53,7 +53,14 @@ import {
   sanitizeTournamentPayload,
   sanitizeUserPayload,
 } from '../context/AppContext'
-import { buildFixtureRowsFromMatches, buildFixtureWeekGroups, normalizeSponsorRecord, resolveMatchEventSelection, sortMatchesChronologically } from '../App'
+import {
+  buildFixtureRowsFromMatches,
+  buildFixtureWeekGroups,
+  normalizeSponsorRecord,
+  resolveMatchEventSelection,
+  resolveTournamentSubmitButtonState,
+  sortMatchesChronologically,
+} from '../App'
 import { checkPermission } from '../utils/permissions'
 
 const createStorage = () => {
@@ -70,6 +77,16 @@ const createStorage = () => {
 }
 
 describe('LeagueHub – full integration scenarios', () => {
+  it('locks the tournament submit button while creation is in flight', () => {
+    const busyState = resolveTournamentSubmitButtonState(true)
+    const idleState = resolveTournamentSubmitButtonState(false)
+
+    expect(busyState.disabled).toBe(true)
+    expect(busyState.label).toBe('Turnuva Oluşturuluyor...')
+    expect(idleState.disabled).toBe(false)
+    expect(idleState.label).toBe('Turnuva Oluştur')
+  })
+
   it('registers a visitor with uppercase username, KVKK consent and manager request flow', () => {
     const payload = {
       fullName: 'efraim yılmaz',
