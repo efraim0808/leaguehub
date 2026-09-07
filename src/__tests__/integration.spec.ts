@@ -57,6 +57,7 @@ import {
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
   normalizeSponsorRecord,
+  resolveLiveBroadcastState,
   resolveMatchEventSelection,
   resolveTournamentSubmitButtonState,
   sortMatchesChronologically,
@@ -85,6 +86,28 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(busyState.label).toBe('Turnuva Oluşturuluyor...')
     expect(idleState.disabled).toBe(false)
     expect(idleState.label).toBe('Turnuva Oluştur')
+  })
+
+  it('resolves an active live broadcast from settings while guarding against missing values', () => {
+    const liveState = resolveLiveBroadcastState({
+      is_live: true,
+      youtube_url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      live_status: 'active',
+    })
+
+    expect(liveState.isLive).toBe(true)
+    expect(liveState.streamUrl).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
+    expect(liveState.embedUrl).toContain('youtube.com/embed/dQw4w9WgXcQ')
+
+    const emptyState = resolveLiveBroadcastState({
+      is_live: false,
+      youtube_url: '',
+      status: 'offline',
+    })
+
+    expect(emptyState.isLive).toBe(false)
+    expect(emptyState.streamUrl).toBe('')
+    expect(emptyState.embedUrl).toBe('')
   })
 
   it('registers a visitor with uppercase username, KVKK consent and manager request flow', () => {

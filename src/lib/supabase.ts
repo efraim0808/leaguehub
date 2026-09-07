@@ -14,6 +14,8 @@ export const subscribeToLeaguehubRealtime = (onChange: () => void) => {
     .on('postgres_changes', { event: '*', schema: 'public', table: 'match_statistics' }, () => onChange())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'fixtures' }, () => onChange())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'tournaments' }, () => onChange())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => onChange())
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'settings' }, () => onChange())
     .subscribe()
   return () => {
     void channel.unsubscribe()

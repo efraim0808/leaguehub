@@ -238,6 +238,13 @@ create table if not exists public.announcements (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.settings (
+  id text primary key default 'live-broadcast',
+  is_live boolean not null default false,
+  youtube_url text default '',
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.gallery_items (
   id uuid primary key default gen_random_uuid(),
   title text not null,
