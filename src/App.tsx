@@ -49,6 +49,7 @@ const navItems = [
 
 export const YOUTUBE_CHANNEL_ID = 'UChkobFPpyMMla5k0RG7d5Jg'
 export const LIVE_BROADCAST_POLL_MS = 30_000
+export const LIVE_BROADCAST_SETTINGS_ID = 1
 
 export type SponsorRecord = {
   id: string
@@ -161,6 +162,8 @@ export const resolveLiveBroadcastState = (source: Record<string, any> | null | u
   const streamValue = [
     record.youtube_url,
     record.youtubeUrl,
+    record.video_id,
+    record.videoId,
     record.live_url,
     record.liveUrl,
     record.stream_url,
@@ -756,14 +759,14 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
       const settingsRow = rows.find((row) => {
         const record = row as Record<string, any>
         const active = record.is_live ?? record.isLive ?? record.live ?? record.active ?? false
-        const youtubeValue = String(record.youtube_url ?? record.youtubeUrl ?? record.live_url ?? record.stream_url ?? '').trim()
+        const youtubeValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? '').trim()
         return Boolean(active) && Boolean(youtubeValue)
       }) ?? rows[0]
 
       const record = (settingsRow ?? {}) as Record<string, any>
       const isLive = getLiveBooleanValue(record.is_live ?? record.isLive ?? record.live ?? record.active ?? false)
-      const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
-      const embedUrl = isLive ? buildEmbeddedYoutubeUrl(rawValue || record.youtube_url || record.youtubeUrl || record.live_url || record.stream_url) : ''
+      const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
+      const embedUrl = isLive ? buildEmbeddedYoutubeUrl(rawValue || record.youtube_url || record.youtubeUrl || record.video_id || record.videoId || record.live_url || record.stream_url) : ''
 
       const nextState = {
         isLive: isLive && Boolean(embedUrl),
@@ -3503,7 +3506,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
     try {
       const payload = {
-        id: 'live-broadcast',
+        id: LIVE_BROADCAST_SETTINGS_ID,
         is_live: true,
         youtube_url: embedUrl,
       }
@@ -3527,7 +3530,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     try {
       const currentVideoId = extractYoutubeVideoId(liveBroadcastForm.youtubeUrl)
       const payload = {
-        id: 'live-broadcast',
+        id: LIVE_BROADCAST_SETTINGS_ID,
         is_live: false,
         youtube_url: currentVideoId ? `https://www.youtube.com/embed/${currentVideoId}` : '',
       }
