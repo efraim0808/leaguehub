@@ -48,14 +48,7 @@ const navItems = [
 ]
 
 export const YOUTUBE_CHANNEL_ID = 'UChkobFPpyMMla5k0RG7d5Jg'
-export const YOUTUBE_CHANNEL_RSS_URL = `https://www.youtube.com/feeds/videos.xml?channel_id=${YOUTUBE_CHANNEL_ID}`
-export const YOUTUBE_RSS_PROXY_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent(YOUTUBE_CHANNEL_RSS_URL)}`
 export const LIVE_BROADCAST_POLL_MS = 30_000
-
-export const getLatestYoutubeVideoIdFromRss = (rssXml: string): string => {
-  const match = rssXml.match(/<yt:videoId>([A-Za-z0-9_-]{11})<\/yt:videoId>/i)
-  return match?.[1] ?? ''
-}
 
 export type SponsorRecord = {
   id: string
@@ -771,27 +764,8 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
 
       const record = (settingsRow ?? {}) as Record<string, any>
       const isLive = getLiveBooleanValue(record.is_live ?? record.isLive ?? record.live ?? record.active ?? false)
-      let embedUrl = ''
-
-      if (isLive) {
-        try {
-          const response = await fetch(YOUTUBE_RSS_PROXY_URL)
-          if (response.ok) {
-            const rssXml = await response.text()
-            const latestVideoId = getLatestYoutubeVideoIdFromRss(rssXml)
-            if (latestVideoId) {
-              embedUrl = `https://www.youtube.com/embed/${latestVideoId}`
-            }
-          }
-        } catch (rssError) {
-          console.warn('[LeagueHub] YouTube RSS feed fetch failed via proxy:', rssError)
-        }
-
-        if (!embedUrl) {
-          const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
-          embedUrl = buildEmbeddedYoutubeUrl(rawValue || record.video_id || record.videoId || record.youtube_url || record.youtubeUrl || record.live_url || record.stream_url) || ''
-        }
-      }
+      const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
+      const embedUrl = isLive ? buildEmbeddedYoutubeUrl(rawValue || record.video_id || record.videoId || record.youtube_url || record.youtubeUrl || record.live_url || record.stream_url) : ''
 
       const nextState = {
         isLive: isLive && Boolean(embedUrl),
@@ -3522,21 +3496,30 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleSaveLiveBroadcastSettings = async () => {
-    const payload = {
-      id: 'live-broadcast',
-      is_live: true,
-      youtube_url: YOUTUBE_RSS_PROXY_URL,
-      video_id: '',
+    const rawLiveValue = liveBroadcastForm.youtubeUrl.trim()
+    const embedUrl = buildEmbeddedYoutubeUrl(rawLiveValue)
+    if (!embedUrl) {
+      window.alert('Geçerli bir YouTube video linki veya video ID giriniz.')
+      return
     }
 
+    const videoId = extractYoutubeVideoId(rawLiveValue) || extractYoutubeVideoId(embedUrl)
+
     try {
+      const payload = {
+        id: 'live-broadcast',
+        is_live: true,
+        youtube_url: embedUrl,
+        video_id: videoId,
+      }
+
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
       if (error) {
         throw error
       }
 
-      setLiveBroadcastForm({ youtubeUrl: YOUTUBE_RSS_PROXY_URL, isLive: true })
-      setGlobalToast({ type: 'success', message: 'Canlı yayın otomatik modda açıldı.' })
+      setLiveBroadcastForm({ youtubeUrl: embedUrl, isLive: true })
+      setGlobalToast({ type: 'success', message: 'Canlı yayın açıldı.' })
       await loadLiveBroadcastSettingsForm()
     } catch (error: any) {
       console.error('[LeagueHub] Live broadcast save failed:', error)
@@ -3547,11 +3530,12 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
   const handleDisableLiveBroadcast = async () => {
     try {
+      const currentVideoId = extractYoutubeVideoId(liveBroadcastForm.youtubeUrl)
       const payload = {
         id: 'live-broadcast',
         is_live: false,
-        youtube_url: YOUTUBE_RSS_PROXY_URL,
-        video_id: '',
+        youtube_url: currentVideoId ? `https://www.youtube.com/embed/${currentVideoId}` : '',
+        video_id: currentVideoId,
       }
 
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
@@ -3559,7 +3543,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         throw error
       }
 
-      setLiveBroadcastForm((current) => ({ ...current, youtubeUrl: YOUTUBE_CHANNEL_RSS_URL, isLive: false }))
+      setLiveBroadcastForm((current) => ({ ...current, youtubeUrl: currentVideoId ? `https://www.youtube.com/embed/${currentVideoId}` : '', isLive: false }))
       setGlobalToast({ type: 'success', message: 'Canlı yayın kapatıldı.' })
       await loadLiveBroadcastSettingsForm()
     } catch (error: any) {
@@ -4551,10 +4535,15 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="text-sm font-semibold text-white">Canlı Yayın</div>
                     <div className="mt-3 space-y-3">
-                      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
-                        RSS otomasyonu aktif: <span className="font-semibold text-cyan-300">{YOUTUBE_CHANNEL_ID}</span>
-                        <div className="mt-1 text-[10px] text-slate-400">Proxy: {YOUTUBE_RSS_PROXY_URL}</div>
-                      </div>
+                      <label className="block text-sm text-slate-300">
+                        YouTube yayın linki / video ID
+                        <input
+                          value={liveBroadcastForm.youtubeUrl}
+                          onChange={(event) => setLiveBroadcastForm((current) => ({ ...current, youtubeUrl: event.target.value }))}
+                          placeholder="https://www.youtube.com/watch?v=nrs4ug5Wyq0 veya nrs4ug5Wyq0"
+                          className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+                        />
+                      </label>
 
                       <div className="flex items-center gap-2">
                         <button

@@ -57,14 +57,12 @@ import {
   buildEmbeddedYoutubeUrl,
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
-  getLatestYoutubeVideoIdFromRss,
   normalizeSponsorRecord,
   resolveLiveBroadcastState,
   resolveMatchEventSelection,
   resolveTournamentSubmitButtonState,
   sortMatchesChronologically,
   YOUTUBE_CHANNEL_ID,
-  YOUTUBE_CHANNEL_RSS_URL,
 } from '../App'
 import { checkPermission } from '../utils/permissions'
 
@@ -92,18 +90,10 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(idleState.label).toBe('Turnuva Oluştur')
   })
 
-  it('reads the latest YouTube RSS video ID and converts it to a direct embed URL', () => {
-    const rssXml = `<?xml version="1.0" encoding="UTF-8"?>
-      <feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015">
-        <entry>
-          <yt:videoId>nrs4ug5Wyq0</yt:videoId>
-        </entry>
-      </feed>`
-
+  it('converts a direct YouTube URL or video ID into an embed URL and handles online/offline states', () => {
     expect(YOUTUBE_CHANNEL_ID).toBe('UChkobFPpyMMla5k0RG7d5Jg')
-    expect(YOUTUBE_CHANNEL_RSS_URL).toContain(YOUTUBE_CHANNEL_ID)
-    expect(getLatestYoutubeVideoIdFromRss(rssXml)).toBe('nrs4ug5Wyq0')
     expect(buildEmbeddedYoutubeUrl('https://www.youtube.com/watch?v=nrs4ug5Wyq0')).toBe('https://www.youtube.com/embed/nrs4ug5Wyq0')
+    expect(buildEmbeddedYoutubeUrl('nrs4ug5Wyq0')).toBe('https://www.youtube.com/embed/nrs4ug5Wyq0')
 
     const liveState = resolveLiveBroadcastState({
       is_live: true,
