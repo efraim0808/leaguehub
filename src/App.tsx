@@ -161,8 +161,6 @@ export const resolveLiveBroadcastState = (source: Record<string, any> | null | u
   const streamValue = [
     record.youtube_url,
     record.youtubeUrl,
-    record.video_id,
-    record.videoId,
     record.live_url,
     record.liveUrl,
     record.stream_url,
@@ -758,14 +756,14 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
       const settingsRow = rows.find((row) => {
         const record = row as Record<string, any>
         const active = record.is_live ?? record.isLive ?? record.live ?? record.active ?? false
-        const youtubeValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? '').trim()
+        const youtubeValue = String(record.youtube_url ?? record.youtubeUrl ?? record.live_url ?? record.stream_url ?? '').trim()
         return Boolean(active) && Boolean(youtubeValue)
       }) ?? rows[0]
 
       const record = (settingsRow ?? {}) as Record<string, any>
       const isLive = getLiveBooleanValue(record.is_live ?? record.isLive ?? record.live ?? record.active ?? false)
-      const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.video_id ?? record.videoId ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
-      const embedUrl = isLive ? buildEmbeddedYoutubeUrl(rawValue || record.video_id || record.videoId || record.youtube_url || record.youtubeUrl || record.live_url || record.stream_url) : ''
+      const rawValue = String(record.youtube_url ?? record.youtubeUrl ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
+      const embedUrl = isLive ? buildEmbeddedYoutubeUrl(rawValue || record.youtube_url || record.youtubeUrl || record.live_url || record.stream_url) : ''
 
       const nextState = {
         isLive: isLive && Boolean(embedUrl),
@@ -3486,9 +3484,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       const rows = Array.isArray(data) ? data : []
       const liveRow = rows.find((row: any) => Boolean(row?.is_live ?? row?.isLive ?? row?.live ?? row?.active)) ?? rows[0]
       const nextRow = (liveRow ?? {}) as Record<string, any>
-      const storedYoutubeUrl = String(nextRow.youtube_url ?? nextRow.youtubeUrl ?? nextRow.video_id ?? nextRow.videoId ?? nextRow.live_url ?? nextRow.stream_url ?? '').trim()
+      const storedYoutubeUrl = String(nextRow.youtube_url ?? nextRow.youtubeUrl ?? nextRow.live_url ?? nextRow.stream_url ?? '').trim()
       const isLive = getLiveBooleanValue(nextRow.is_live ?? nextRow.isLive ?? nextRow.live ?? nextRow.active ?? false)
-      const youtubeUrl = isLive ? buildEmbeddedYoutubeUrl(storedYoutubeUrl || nextRow.video_id || nextRow.videoId || nextRow.youtube_url || nextRow.youtubeUrl || nextRow.live_url || nextRow.stream_url) : ''
+      const youtubeUrl = isLive ? buildEmbeddedYoutubeUrl(storedYoutubeUrl || nextRow.youtube_url || nextRow.youtubeUrl || nextRow.live_url || nextRow.stream_url) : ''
       setLiveBroadcastForm({ youtubeUrl, isLive })
     } catch (error) {
       console.error('[LeagueHub] live broadcast settings form reload failed:', error)
@@ -3503,14 +3501,11 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       return
     }
 
-    const videoId = extractYoutubeVideoId(rawLiveValue) || extractYoutubeVideoId(embedUrl)
-
     try {
       const payload = {
         id: 'live-broadcast',
         is_live: true,
         youtube_url: embedUrl,
-        video_id: videoId,
       }
 
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
@@ -3535,7 +3530,6 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         id: 'live-broadcast',
         is_live: false,
         youtube_url: currentVideoId ? `https://www.youtube.com/embed/${currentVideoId}` : '',
-        video_id: currentVideoId,
       }
 
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
