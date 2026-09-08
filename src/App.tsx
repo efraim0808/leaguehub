@@ -3091,8 +3091,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   } | null>(null)
   const [resetPasswordForm, setResetPasswordForm] = useState<Record<string, string>>({})
   const [resetPasswordMessage, setResetPasswordMessage] = useState('')
-  const [adminModal, setAdminModal] = useState<'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | null>(null)
-  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors'>('overview')
+  const [adminModal, setAdminModal] = useState<'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | null>(null)
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast'>('overview')
   const [fixtureForm, setFixtureForm] = useState<{ tournamentId: string; days: string[]; times: string[]; venue: string }>({
     tournamentId: safeTournaments[0]?.id ?? '',
     days: ['Salı', 'Perşembe'],
@@ -3773,6 +3773,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     { key: 'tournaments', label: 'Turnuvalar', description: 'Etkinlik ve durum' },
     { key: 'users', label: 'Onaylar', description: 'Rol ve başvuru takibi' },
     { key: 'fixture', label: 'Fikstür', description: 'Planlama ve maç akışı' },
+    { key: 'live-broadcast', label: 'Canlı Yayın', description: 'Link ve yayın yönetimi' },
     { key: 'sponsors', label: 'Sponsorlar', description: 'Sponsor yönetimi' },
     { key: 'password-requests', label: 'Şifre Talepleri', description: 'Güvenlik yönetimi' },
   ] as const
@@ -3789,6 +3790,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     { id: 'tournaments', label: 'Turnuvalar', description: 'Planlama' },
     { id: 'users', label: 'Onaylar', description: 'İzin ve başvurular' },
     { id: 'fixture', label: 'Fikstür', description: 'Otomasyon' },
+    { id: 'live-broadcast', label: 'Canlı Yayın', description: 'Yayın yönetimi' },
     { id: 'sponsors', label: 'Sponsorlar', description: 'Yönetim' },
     { id: 'password-requests', label: 'Şifre', description: 'Yönetim' },
   ] as const
@@ -4533,7 +4535,22 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                   </div>
 
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                    <div className="text-sm font-semibold text-white">Canlı Yayın</div>
+                    <div className="text-sm font-semibold text-white">Duyurular</div>
+                    <div className="mt-2 text-sm text-slate-400">Toplam 3 aktif bildirim ve 4 sponsor listesi hazırlanmış durumda.</div>
+                  </div>
+                </div>
+              ) : null}
+
+              {adminTab === 'live-broadcast' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Canlı Yayın</div>
+                      <h4 className="mt-2 text-xl font-black text-white">Yayın yönetimi</h4>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="mt-3 space-y-3">
                       <label className="block text-sm text-slate-300">
                         YouTube yayın linki / video ID
@@ -4545,13 +4562,25 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                         />
                       </label>
 
+                      <label className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-300">
+                        <span>Canlı yayın açık mı?</span>
+                        <button
+                          type="button"
+                          onClick={() => setLiveBroadcastForm((current) => ({ ...current, isLive: !current.isLive }))}
+                          className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${liveBroadcastForm.isLive ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                          aria-label="Canlı yayın durumunu değiştir"
+                        >
+                          <span className={`inline-block h-5 w-5 rounded-full bg-white transition ${liveBroadcastForm.isLive ? 'translate-x-6' : 'translate-x-1'}`} />
+                        </button>
+                      </label>
+
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => void handleSaveLiveBroadcastSettings()}
                           className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950"
                         >
-                          Yayın Aç
+                          Kaydet
                         </button>
                         <button
                           type="button"
@@ -4566,11 +4595,6 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                         Durum: <span className={liveBroadcastForm.isLive ? 'text-emerald-300' : 'text-slate-400'}>{liveBroadcastForm.isLive ? 'Canlı' : 'Kapalı'}</span>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                    <div className="text-sm font-semibold text-white">Duyurular</div>
-                    <div className="mt-2 text-sm text-slate-400">Toplam 3 aktif bildirim ve 4 sponsor listesi hazırlanmış durumda.</div>
                   </div>
                 </div>
               ) : null}
@@ -4823,7 +4847,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-300">Admin Panel</div>
                   <h3 className="mt-2 text-2xl font-black text-white">
-                    {adminModal === 'users' ? 'Kullanıcı Yönetimi' : adminModal === 'tournaments' ? 'Turnuva Yönetimi' : adminModal === 'home' ? 'Ana Sayfa Yönetimi' : adminModal === 'sponsors' ? 'Sponsor Yönetimi' : 'Otomatik Fikstür & Maç Planlama'}
+                    {adminModal === 'users' ? 'Kullanıcı Yönetimi' : adminModal === 'tournaments' ? 'Turnuva Yönetimi' : adminModal === 'home' ? 'Ana Sayfa Yönetimi' : adminModal === 'live-broadcast' ? 'Canlı Yayın Yönetimi' : adminModal === 'sponsors' ? 'Sponsor Yönetimi' : 'Otomatik Fikstür & Maç Planlama'}
                   </h3>
                 </div>
                 <button type="button" onClick={() => setAdminModal(null)} className="rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-slate-500">Kapat</button>
