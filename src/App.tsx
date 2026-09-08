@@ -49,6 +49,7 @@ const navItems = [
 
 export const YOUTUBE_CHANNEL_ID = 'UChkobFPpyMMla5k0RG7d5Jg'
 export const YOUTUBE_CHANNEL_RSS_URL = `https://www.youtube.com/feeds/videos.xml?channel_id=${YOUTUBE_CHANNEL_ID}`
+export const YOUTUBE_RSS_PROXY_URL = `https://api.allorigins.win/raw?url=${encodeURIComponent(YOUTUBE_CHANNEL_RSS_URL)}`
 export const LIVE_BROADCAST_POLL_MS = 30_000
 
 export const getLatestYoutubeVideoIdFromRss = (rssXml: string): string => {
@@ -773,9 +774,8 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
       let embedUrl = ''
 
       if (isLive) {
-        const feedUrl = YOUTUBE_CHANNEL_RSS_URL
         try {
-          const response = await fetch(feedUrl)
+          const response = await fetch(YOUTUBE_RSS_PROXY_URL)
           if (response.ok) {
             const rssXml = await response.text()
             const latestVideoId = getLatestYoutubeVideoIdFromRss(rssXml)
@@ -784,7 +784,7 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
             }
           }
         } catch (rssError) {
-          console.warn('[LeagueHub] YouTube RSS feed fetch failed:', rssError)
+          console.warn('[LeagueHub] YouTube RSS feed fetch failed via proxy:', rssError)
         }
 
         if (!embedUrl) {
@@ -3525,7 +3525,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     const payload = {
       id: 'live-broadcast',
       is_live: true,
-      youtube_url: YOUTUBE_CHANNEL_RSS_URL,
+      youtube_url: YOUTUBE_RSS_PROXY_URL,
       video_id: '',
     }
 
@@ -3535,7 +3535,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         throw error
       }
 
-      setLiveBroadcastForm({ youtubeUrl: YOUTUBE_CHANNEL_RSS_URL, isLive: true })
+      setLiveBroadcastForm({ youtubeUrl: YOUTUBE_RSS_PROXY_URL, isLive: true })
       setGlobalToast({ type: 'success', message: 'Canlı yayın otomatik modda açıldı.' })
       await loadLiveBroadcastSettingsForm()
     } catch (error: any) {
@@ -3550,7 +3550,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       const payload = {
         id: 'live-broadcast',
         is_live: false,
-        youtube_url: YOUTUBE_CHANNEL_RSS_URL,
+        youtube_url: YOUTUBE_RSS_PROXY_URL,
         video_id: '',
       }
 
@@ -4553,6 +4553,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                     <div className="mt-3 space-y-3">
                       <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-xs text-slate-300">
                         RSS otomasyonu aktif: <span className="font-semibold text-cyan-300">{YOUTUBE_CHANNEL_ID}</span>
+                        <div className="mt-1 text-[10px] text-slate-400">Proxy: {YOUTUBE_RSS_PROXY_URL}</div>
                       </div>
 
                       <div className="flex items-center gap-2">
