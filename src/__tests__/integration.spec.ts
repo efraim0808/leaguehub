@@ -56,6 +56,8 @@ import {
 import {
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
+  LEAGUEHUB_LIVE_CHANNEL_ID,
+  LEAGUEHUB_LIVE_EMBED_URL,
   normalizeSponsorRecord,
   resolveLiveBroadcastState,
   resolveMatchEventSelection,
@@ -96,8 +98,8 @@ describe('LeagueHub – full integration scenarios', () => {
     })
 
     expect(liveState.isLive).toBe(true)
-    expect(liveState.streamUrl).toBe('https://www.youtube.com/watch?v=dQw4w9WgXcQ')
-    expect(liveState.embedUrl).toContain('youtube.com/embed/dQw4w9WgXcQ')
+    expect(liveState.streamUrl).toBe('https://www.youtube.com/embed/live_stream?channel=UChkobFPpyMMla5k0RG7d5Jg')
+    expect(liveState.embedUrl).toBe('https://www.youtube.com/embed/live_stream?channel=UChkobFPpyMMla5k0RG7d5Jg')
 
     const emptyState = resolveLiveBroadcastState({
       is_live: false,
@@ -108,6 +110,29 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(emptyState.isLive).toBe(false)
     expect(emptyState.streamUrl).toBe('')
     expect(emptyState.embedUrl).toBe('')
+  })
+
+  it('locks the live embed to the fixed Saglik Calisanlar Spor Kulubu channel', () => {
+    const liveState = resolveLiveBroadcastState({
+      is_live: true,
+      youtube_url: '',
+      live_status: 'active',
+    })
+
+    expect(LEAGUEHUB_LIVE_CHANNEL_ID).toBe('UChkobFPpyMMla5k0RG7d5Jg')
+    expect(liveState.isLive).toBe(true)
+    expect(liveState.streamUrl).toBe(LEAGUEHUB_LIVE_EMBED_URL)
+    expect(liveState.embedUrl).toBe(LEAGUEHUB_LIVE_EMBED_URL)
+
+    const offlineState = resolveLiveBroadcastState({
+      is_live: false,
+      youtube_url: '',
+      status: 'offline',
+    })
+
+    expect(offlineState.isLive).toBe(false)
+    expect(offlineState.streamUrl).toBe('')
+    expect(offlineState.embedUrl).toBe('')
   })
 
   it('registers a visitor with uppercase username, KVKK consent and manager request flow', () => {

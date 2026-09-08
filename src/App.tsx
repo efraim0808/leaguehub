@@ -47,6 +47,9 @@ const navItems = [
   { to: '/profile', label: 'Profilim', icon: UserRound },
 ]
 
+export const LEAGUEHUB_LIVE_CHANNEL_ID = 'UChkobFPpyMMla5k0RG7d5Jg'
+export const LEAGUEHUB_LIVE_EMBED_URL = `https://www.youtube.com/embed/live_stream?channel=${LEAGUEHUB_LIVE_CHANNEL_ID}`
+
 export type SponsorRecord = {
   id: string
   name: string
@@ -83,13 +86,6 @@ const getLiveBooleanValue = (value: unknown): boolean => {
   }
 
   return Boolean(value)
-}
-
-const getUrlFromText = (value: unknown): string => {
-  if (typeof value !== 'string') return ''
-  const urlMatch = value.match(/https?:\/\/[^\s\"'<>]+/i)
-  if (urlMatch) return urlMatch[0].replace(/[),.;]+$/, '')
-  return ''
 }
 
 export const buildEmbeddedYoutubeUrl = (value: unknown): string => {
@@ -130,34 +126,6 @@ export const resolveLiveBroadcastState = (source: Record<string, any> | null | u
     record.isActive,
   ]
 
-  const streamCandidates = [
-    record.youtube_url,
-    record.youtubeUrl,
-    record.live_url,
-    record.liveUrl,
-    record.stream_url,
-    record.streamUrl,
-    record.broadcast_url,
-    record.broadcastUrl,
-    record.video_url,
-    record.videoUrl,
-    record.url,
-    record.embed_url,
-    record.embedUrl,
-    record.body,
-    record.description,
-    record.message,
-  ]
-
-  const streamUrl = streamCandidates
-    .map((value) => {
-      if (typeof value === 'string') {
-        return getUrlFromText(value) || value.trim()
-      }
-      return ''
-    })
-    .find((value) => Boolean(value)) ?? ''
-
   const resolvedStatus = statusCandidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '')
   const statusText = String(resolvedStatus ?? '').trim().toLowerCase()
   const hasActiveFlag = [
@@ -173,13 +141,13 @@ export const resolveLiveBroadcastState = (source: Record<string, any> | null | u
     record.enabled,
   ].some((value) => getLiveBooleanValue(value))
   const hasActiveStatus = ['true', '1', 'active', 'live', 'online', 'streaming', 'broadcasting', 'yayın', 'yayin', 'açık', 'acik', 'open', 'enabled'].includes(statusText)
-  const isLive = Boolean(streamUrl) && (hasActiveFlag || hasActiveStatus || statusText === 'true')
-  const safeStreamUrl = isLive ? buildEmbeddedYoutubeUrl(streamUrl) : ''
+  const isLive = hasActiveFlag || hasActiveStatus || statusText === 'true'
+  const fixedStreamUrl = isLive ? LEAGUEHUB_LIVE_EMBED_URL : ''
 
   return {
     isLive,
-    streamUrl: isLive ? safeStreamUrl : '',
-    embedUrl: isLive ? buildEmbeddedYoutubeUrl(safeStreamUrl || streamUrl) : '',
+    streamUrl: fixedStreamUrl,
+    embedUrl: fixedStreamUrl,
     status: statusText || (isLive ? 'live' : 'offline'),
   }
 }
@@ -760,13 +728,12 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
 
       const record = (selectedRow ?? {}) as Record<string, any>
       const isLive = getLiveBooleanValue(record.is_live ?? record.isLive ?? record.live ?? record.active ?? false)
-      const rawUrl = String(record.youtube_url ?? record.youtubeUrl ?? record.live_url ?? record.stream_url ?? record.url ?? '').trim()
-      const safeUrl = buildEmbeddedYoutubeUrl(rawUrl)
+      const safeUrl = isLive ? LEAGUEHUB_LIVE_EMBED_URL : ''
 
       const nextState = {
-        isLive: isLive && Boolean(rawUrl),
-        streamUrl: isLive && rawUrl ? safeUrl : '',
-        embedUrl: isLive && rawUrl ? buildEmbeddedYoutubeUrl(safeUrl || rawUrl) : '',
+        isLive,
+        streamUrl: safeUrl,
+        embedUrl: safeUrl,
         status: isLive ? 'live' : 'offline',
       }
 
@@ -3463,8 +3430,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       const rows = Array.isArray(data) ? data : []
       const liveRow = rows.find((row: any) => Boolean(row?.is_live ?? row?.isLive ?? row?.live ?? row?.active)) ?? rows[0]
       const nextRow = (liveRow ?? {}) as Record<string, any>
-      const youtubeUrl = String(nextRow.youtube_url ?? nextRow.youtubeUrl ?? nextRow.live_url ?? nextRow.stream_url ?? '').trim()
+      const storedYoutubeUrl = String(nextRow.youtube_url ?? nextRow.youtubeUrl ?? nextRow.live_url ?? nextRow.stream_url ?? '').trim()
       const isLive = getLiveBooleanValue(nextRow.is_live ?? nextRow.isLive ?? nextRow.live ?? nextRow.active ?? false)
+      const youtubeUrl = storedYoutubeUrl || (isLive ? LEAGUEHUB_LIVE_EMBED_URL : '')
       setLiveBroadcastForm({ youtubeUrl, isLive })
     } catch (error) {
       console.error('[LeagueHub] live broadcast settings form reload failed:', error)
@@ -3472,17 +3440,14 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleSaveLiveBroadcastSettings = async () => {
-    const cleanedYoutubeUrl = liveBroadcastForm.youtubeUrl.trim()
-    if (!cleanedYoutubeUrl) {
-      window.alert('YouTube yayın linki gereklidir.')
-      return
-    }
+    const cleanedYoutubeUrl = (liveBroadcastForm.youtubeUrl || LEAGUEHUB_LIVE_EMBED_URL).trim() || LEAGUEHUB_LIVE_EMBED_URL
 
     try {
       const payload = {
         id: 'live-broadcast',
         is_live: true,
-        youtube_url: cleanedYoutubeUrl,
+        youtube_url: LEAGUEHUB_LIVE_EMBED_URL,
+        channel_id: LEAGUEHUB_LIVE_CHANNEL_ID,
       }
 
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
@@ -3505,7 +3470,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       const payload = {
         id: 'live-broadcast',
         is_live: false,
-        youtube_url: liveBroadcastForm.youtubeUrl.trim(),
+        youtube_url: LEAGUEHUB_LIVE_EMBED_URL,
+        channel_id: LEAGUEHUB_LIVE_CHANNEL_ID,
       }
 
       const { error } = await supabase.from('settings').upsert(payload, { onConflict: 'id' })
@@ -3513,7 +3479,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         throw error
       }
 
-      setLiveBroadcastForm((current) => ({ ...current, isLive: false }))
+      setLiveBroadcastForm((current) => ({ ...current, youtubeUrl: LEAGUEHUB_LIVE_EMBED_URL, isLive: false }))
       setGlobalToast({ type: 'success', message: 'Canlı yayın kapatıldı.' })
       await loadLiveBroadcastSettingsForm()
     } catch (error: any) {
@@ -4508,9 +4474,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                       <label className="block text-sm text-slate-300">
                         YouTube yayın linki
                         <input
-                          value={liveBroadcastForm.youtubeUrl}
+                          value={liveBroadcastForm.youtubeUrl || LEAGUEHUB_LIVE_EMBED_URL}
                           onChange={(event) => setLiveBroadcastForm((current) => ({ ...current, youtubeUrl: event.target.value }))}
-                          placeholder="https://www.youtube.com/watch?v=..."
+                          placeholder={LEAGUEHUB_LIVE_EMBED_URL}
                           className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
                         />
                       </label>

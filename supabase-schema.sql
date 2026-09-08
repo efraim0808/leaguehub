@@ -241,7 +241,8 @@ create table if not exists public.announcements (
 create table if not exists public.settings (
   id text primary key default 'live-broadcast',
   is_live boolean not null default false,
-  youtube_url text default '',
+  youtube_url text default 'https://www.youtube.com/embed/live_stream?channel=UChkobFPpyMMla5k0RG7d5Jg',
+  channel_id text default 'UChkobFPpyMMla5k0RG7d5Jg',
   updated_at timestamptz not null default now()
 );
 
