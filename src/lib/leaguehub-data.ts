@@ -388,14 +388,13 @@ export const createVisitorTestUsers = async (): Promise<{ created: string[]; exi
       continue
     }
 
-    const usersUpsertResult = await supabase.from('users').upsert({
+    const usersUpsertResult = await supabase.from('users').insert([{
       id: userId,
       full_name: visitor.fullName,
       email: visitor.email,
       password: visitor.password,
       username: visitor.username,
       role: 'Visitor',
-      is_active: true,
       kvkk_accepted: true,
       phone: '',
       tc: '',
@@ -403,7 +402,7 @@ export const createVisitorTestUsers = async (): Promise<{ created: string[]; exi
       team_manager_request: false,
       permissions: visitor.permissions,
       created_at: new Date().toISOString(),
-    }, { onConflict: 'id' })
+    }])
 
     if (usersUpsertResult.error) {
       result.failed.push(`${visitor.email}: ${usersUpsertResult.error.message}`)

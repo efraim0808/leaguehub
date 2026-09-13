@@ -162,7 +162,6 @@ export const sanitizeUserPayload = (payload: Record<string, unknown>) => {
     'permissions',
     'team_id',
     'team_manager_request',
-    'is_active',
     'kvkk_accepted',
     'phone',
     'tc',
@@ -179,22 +178,20 @@ export const sanitizeUserPayload = (payload: Record<string, unknown>) => {
 
 export const sanitizeAnnouncementPayload = (payload: Record<string, unknown>) => {
   const allowedKeys = new Set([
-    'id',
     'title',
-    'body',
+    'content',
     'created_at',
   ])
 
-  const rawId = typeof payload.id === 'string' ? payload.id.trim() : ''
-  const normalizedId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawId)
-    ? rawId
-    : crypto.randomUUID()
-
-  const normalized: Record<string, unknown> = { id: normalizedId }
+  const normalized: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(payload)) {
-    if (!allowedKeys.has(key) || value === undefined || value === null) continue
-    if (key === 'id') continue
+    if (value === undefined || value === null) continue
+    if (key === 'body' && !Object.prototype.hasOwnProperty.call(payload, 'content')) {
+      normalized.content = value
+      continue
+    }
+    if (!allowedKeys.has(key)) continue
     normalized[key] = value
   }
 
@@ -486,7 +483,7 @@ const mapUserRow = (row: any): User => ({
   password: row.password ?? '',
   username: row.username ?? (row.name ?? row.full_name ?? '').replace(/\s+/g, '').toUpperCase() ?? '',
   role: row.role ?? 'USER',
-  isActive: row.is_active ?? true,
+  isActive: true,
   kvkkAccepted: row.kvkk_accepted ?? false,
   phone: row.phone ?? '',
   tc: row.tc ?? '',
@@ -1222,7 +1219,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         duyurular: false,
         ayarlar: false,
       },
-      status: 'Aktif',
     })
 
     console.log('[LeagueHub Register] captured password from form state:', { passwordPresent: Boolean(password), passwordLength: password.length })
@@ -1471,7 +1467,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       role: user.role,
       permissions: user.permissions,
       team_id: user.teamId ?? null,
-      is_active: user.isActive,
       kvkk_accepted: user.kvkkAccepted,
       phone: user.phone,
       tc: user.tc,
@@ -1561,9 +1556,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     )
 
     const announcementRows = nextState.announcements.map((announcement) => sanitizeAnnouncementPayload({
-      id: announcement.id,
       title: announcement.title,
-      body: announcement.body,
+      content: announcement.body,
       created_at: announcement.date,
     }))
 
@@ -1593,7 +1587,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       fixtureRows.length ? supabase.from('fixtures').insert(fixtureRows) : Promise.resolve({ error: null }),
       matchRows.length ? supabase.from('matches').upsert(matchRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
       matchEventRows.length ? supabase.from('match_events').upsert(matchEventRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
-      announcementRows.length ? supabase.from('announcements').upsert(announcementRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
+      announcementRows.length ? supabase.from('announcements').insert(announcementRows) : Promise.resolve({ error: null }),
       galleryRows.length ? supabase.from('gallery_items').upsert(galleryRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
       messageRows.length ? supabase.from('messages').upsert(messageRows, { onConflict: 'id' }) : Promise.resolve({ error: null }),
     ])

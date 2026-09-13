@@ -3508,12 +3508,12 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   const handleAddAnnouncement = async () => {
     if (!announcementForm.title.trim() || !announcementForm.body.trim()) return
     const nextAnnouncement = {
-      id: crypto.randomUUID(),
       title: announcementForm.title.trim(),
-      body: announcementForm.body.trim(),
-      date: new Date().toISOString(),
+      content: announcementForm.body.trim(),
+      created_at: new Date().toISOString(),
     }
-    await updateAppState({ ...appState, announcements: [nextAnnouncement, ...appState.announcements] })
+    await supabase.from('announcements').insert([{ title: nextAnnouncement.title, content: nextAnnouncement.content }])
+    await refreshData()
     setAnnouncementForm({ title: '', body: '' })
   }
 

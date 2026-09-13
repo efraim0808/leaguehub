@@ -215,17 +215,19 @@ describe('LeagueHub – full integration scenarios', () => {
       id: 'announcement-123',
       title: 'Duyuru başlığı',
       body: 'Duyuru içeriği',
+      content: 'Duyuru içeriği',
       created_at: '2026-09-13T10:00:00Z',
       author: 'admin',
       is_pinned: true,
     })
 
     expect(payload.title).toBe('Duyuru başlığı')
-    expect(payload.body).toBe('Duyuru içeriği')
+    expect(payload.content).toBe('Duyuru içeriği')
     expect(payload.created_at).toBe('2026-09-13T10:00:00Z')
     expect(payload).not.toHaveProperty('author')
     expect(payload).not.toHaveProperty('is_pinned')
-    expect(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(payload.id))).toBe(true)
+    expect(payload).not.toHaveProperty('id')
+    expect(payload).not.toHaveProperty('body')
   })
 
   it('keeps real numeric discipline values in the payload while filtering legacy metadata', () => {
