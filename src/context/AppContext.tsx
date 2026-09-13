@@ -185,12 +185,20 @@ export const sanitizeAnnouncementPayload = (payload: Record<string, unknown>) =>
     'created_at',
   ])
 
-  return Object.entries(payload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
-    if (allowedKeys.has(key) && value !== undefined && value !== null) {
-      accumulator[key] = value
-    }
-    return accumulator
-  }, {})
+  const rawId = typeof payload.id === 'string' ? payload.id.trim() : ''
+  const normalizedId = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawId)
+    ? rawId
+    : crypto.randomUUID()
+
+  const normalized: Record<string, unknown> = { id: normalizedId }
+
+  for (const [key, value] of Object.entries(payload)) {
+    if (!allowedKeys.has(key) || value === undefined || value === null) continue
+    if (key === 'id') continue
+    normalized[key] = value
+  }
+
+  return normalized
 }
 
 export const sanitizeTeamPayload = (payload: Record<string, unknown>) => {
