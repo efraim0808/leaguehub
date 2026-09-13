@@ -177,6 +177,22 @@ export const sanitizeUserPayload = (payload: Record<string, unknown>) => {
   }, {})
 }
 
+export const sanitizeAnnouncementPayload = (payload: Record<string, unknown>) => {
+  const allowedKeys = new Set([
+    'id',
+    'title',
+    'body',
+    'created_at',
+  ])
+
+  return Object.entries(payload).reduce<Record<string, unknown>>((accumulator, [key, value]) => {
+    if (allowedKeys.has(key) && value !== undefined && value !== null) {
+      accumulator[key] = value
+    }
+    return accumulator
+  }, {})
+}
+
 export const sanitizeTeamPayload = (payload: Record<string, unknown>) => {
   const allowedKeys = new Set([
     'id',
@@ -1536,7 +1552,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       })),
     )
 
-    const announcementRows = nextState.announcements.map((announcement) => ({
+    const announcementRows = nextState.announcements.map((announcement) => sanitizeAnnouncementPayload({
       id: announcement.id,
       title: announcement.title,
       body: announcement.body,

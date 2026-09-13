@@ -6,6 +6,7 @@ import {
   CalendarDays,
   Camera,
   Check,
+  Eye,
   Home,
   Image as ImageIcon,
   LogOut,
@@ -880,6 +881,7 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
   }
 
   const [selectedSponsor, setSelectedSponsor] = useState<SponsorRecord | null>(null)
+  const [rulesDialogTournament, setRulesDialogTournament] = useState<Tournament | null>(null)
 
   return (
     <div className="space-y-5 pb-8">
@@ -919,6 +921,35 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
               >
                 {applying ? 'Gönderiliyor...' : 'Turnuvaya Başvur / Takım Kaydı Yap'}
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {rulesDialogTournament ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm"
+          onClick={() => setRulesDialogTournament(null)}
+        >
+          <div
+            className="w-full max-w-2xl rounded-[28px] border border-slate-700 bg-slate-900 p-5 shadow-2xl shadow-cyan-500/10"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-300">Turnuva Kuralları</div>
+                <h3 className="mt-2 text-2xl font-black text-white">{rulesDialogTournament.name}</h3>
+              </div>
+              <button type="button" onClick={() => setRulesDialogTournament(null)} className="rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-sm text-slate-200 hover:border-slate-500">Kapat</button>
+            </div>
+
+            <div className="space-y-4 text-sm text-slate-300">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-slate-400">Detaylar ve kurallar</div>
+                <div className="whitespace-pre-wrap leading-7 text-slate-200">
+                  {rulesDialogTournament.rules?.trim() || 'Bu turnuvaya ait eklenmiş kural veya detay bilgisi bulunmuyor.'}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1026,17 +1057,27 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
                   </div>
 
                   {currentUser?.role === 'Team Manager' ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedOpenTournament(tournament)
-                        setTeamNameInput('')
-                        setApplicationFeedback('')
-                      }}
-                      className="mt-4 w-full rounded-2xl bg-violet-500 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-400"
-                    >
-                      Turnuvaya Başvur / Takım Kaydı Yap
-                    </button>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={() => setRulesDialogTournament(tournament)}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-sm font-semibold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+                      >
+                        <Eye size={16} />
+                        Kuralları Oku / Detaylar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedOpenTournament(tournament)
+                          setTeamNameInput('')
+                          setApplicationFeedback('')
+                        }}
+                        className="flex-1 rounded-2xl bg-violet-500 px-4 py-2.5 text-sm font-black text-white transition hover:bg-violet-400"
+                      >
+                        Turnuvaya Başvur / Takım Kaydı Yap
+                      </button>
+                    </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-sm text-slate-300">
                       Bu alana erişmek için takım sorumlusu olarak giriş yapmanız gerekir.
@@ -3092,8 +3133,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   } | null>(null)
   const [resetPasswordForm, setResetPasswordForm] = useState<Record<string, string>>({})
   const [resetPasswordMessage, setResetPasswordMessage] = useState('')
-  const [adminModal, setAdminModal] = useState<'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | null>(null)
-  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast'>('overview')
+  const [adminModal, setAdminModal] = useState<'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | 'announcements' | null>(null)
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | 'announcements'>('overview')
   const [fixtureForm, setFixtureForm] = useState<{ tournamentId: string; days: string[]; times: string[]; venue: string }>({
     tournamentId: safeTournaments[0]?.id ?? '',
     days: ['Salı', 'Perşembe'],
@@ -3771,6 +3812,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     { key: 'users', label: 'Onaylar', description: 'Rol ve başvuru takibi' },
     { key: 'fixture', label: 'Fikstür', description: 'Planlama ve maç akışı' },
     { key: 'live-broadcast', label: 'Canlı Yayın', description: 'Link ve yayın yönetimi' },
+    { key: 'announcements', label: 'Duyuru Yönetimi', description: 'İçerik ve bildirimler' },
     { key: 'sponsors', label: 'Sponsorlar', description: 'Sponsor yönetimi' },
     { key: 'password-requests', label: 'Şifre Talepleri', description: 'Güvenlik yönetimi' },
   ] as const
@@ -3788,6 +3830,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     { id: 'users', label: 'Onaylar', description: 'İzin ve başvurular' },
     { id: 'fixture', label: 'Fikstür', description: 'Otomasyon' },
     { id: 'live-broadcast', label: 'Canlı Yayın', description: 'Yayın yönetimi' },
+    { id: 'announcements', label: 'Duyurular', description: 'İçerik yönetimi' },
     { id: 'sponsors', label: 'Sponsorlar', description: 'Yönetim' },
     { id: 'password-requests', label: 'Şifre', description: 'Yönetim' },
   ] as const
@@ -4538,6 +4581,56 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                 </div>
               ) : null}
 
+              {adminTab === 'announcements' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Duyuru Yönetimi</div>
+                      <h4 className="mt-2 text-xl font-black text-white">İçerik ve haber akışı</h4>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <label className="text-sm text-slate-300 md:col-span-2">
+                        Duyuru başlığı
+                        <input value={announcementForm.title} onChange={(event) => setAnnouncementForm({ ...announcementForm, title: event.target.value })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder="Örn: Turnuva güncellemesi" />
+                      </label>
+                      <label className="text-sm text-slate-300 md:col-span-2">
+                        Duyuru içeriği
+                        <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm({ ...announcementForm, body: event.target.value })} className="mt-1 min-h-28 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder="Turnuva detaylarını ve önemli duyuruları yazın..." />
+                      </label>
+                    </div>
+                    <button type="button" onClick={() => void handleAddAnnouncement()} className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950">Duyuru Yayınla / Kaydet</button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="text-sm font-semibold text-white">Mevcut Duyurular</div>
+                    {appState.announcements.length === 0 ? (
+                      <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-400">Hiç duyuru eklenmemiş.</div>
+                    ) : (
+                      appState.announcements.map((item) => (
+                        <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white">{item.title}</div>
+                            <div className="mt-1 text-xs text-slate-400 line-clamp-2">{item.body}</div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => void handleDeleteAnnouncement(item.id)}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                            aria-label={`${item.title} duyurusunu sil`}
+                            title="Duyuruyu sil"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+
               {adminTab === 'live-broadcast' ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between gap-3">
@@ -4844,7 +4937,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                 <div>
                   <div className="text-[10px] font-semibold uppercase tracking-[0.32em] text-cyan-300">Admin Panel</div>
                   <h3 className="mt-2 text-2xl font-black text-white">
-                    {adminModal === 'users' ? 'Kullanıcı Yönetimi' : adminModal === 'tournaments' ? 'Turnuva Yönetimi' : adminModal === 'home' ? 'Ana Sayfa Yönetimi' : adminModal === 'live-broadcast' ? 'Canlı Yayın Yönetimi' : adminModal === 'sponsors' ? 'Sponsor Yönetimi' : 'Otomatik Fikstür & Maç Planlama'}
+                    {adminModal === 'users' ? 'Kullanıcı Yönetimi' : adminModal === 'tournaments' ? 'Turnuva Yönetimi' : adminModal === 'home' ? 'Ana Sayfa Yönetimi' : adminModal === 'live-broadcast' ? 'Canlı Yayın Yönetimi' : adminModal === 'announcements' ? 'Duyuru Yönetimi' : adminModal === 'sponsors' ? 'Sponsor Yönetimi' : 'Otomatik Fikstür & Maç Planlama'}
                   </h3>
                 </div>
                 <button type="button" onClick={() => setAdminModal(null)} className="rounded-full border border-slate-700 bg-slate-950/50 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-slate-500">Kapat</button>

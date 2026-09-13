@@ -41,6 +41,7 @@ import {
   buildDisciplineRecordWritePayload,
   mapFixtureRow,
   mapMatchRow,
+  sanitizeAnnouncementPayload,
   sanitizeDisciplinePatch,
   sanitizeDisciplineRecordPayload,
   sanitizeFixturePayload,
@@ -207,6 +208,46 @@ describe('LeagueHub – full integration scenarios', () => {
       role: 'Team Manager',
     })
     expect(payload).not.toHaveProperty('legacy_field')
+  })
+
+  it('keeps announcement payload fields valid for Supabase inserts while filtering extra metadata', () => {
+    const payload = sanitizeAnnouncementPayload({
+      id: 'announcement-123',
+      title: 'Duyuru başlığı',
+      body: 'Duyuru içeriği',
+      created_at: '2026-09-13T10:00:00Z',
+      author: 'admin',
+      is_pinned: true,
+    })
+
+    expect(payload).toMatchObject({
+      id: 'announcement-123',
+      title: 'Duyuru başlığı',
+      body: 'Duyuru içeriği',
+      created_at: '2026-09-13T10:00:00Z',
+    })
+    expect(payload).not.toHaveProperty('author')
+    expect(payload).not.toHaveProperty('is_pinned')
+  })
+
+  it('keeps announcement payload fields valid for Supabase inserts while filtering extra metadata', () => {
+    const payload = sanitizeAnnouncementPayload({
+      id: 'announcement-123',
+      title: 'Duyuru başlığı',
+      body: 'Duyuru içeriği',
+      created_at: '2026-09-13T10:00:00Z',
+      author: 'admin',
+      is_pinned: true,
+    })
+
+    expect(payload).toMatchObject({
+      id: 'announcement-123',
+      title: 'Duyuru başlığı',
+      body: 'Duyuru içeriği',
+      created_at: '2026-09-13T10:00:00Z',
+    })
+    expect(payload).not.toHaveProperty('author')
+    expect(payload).not.toHaveProperty('is_pinned')
   })
 
   it('keeps real numeric discipline values in the payload while filtering legacy metadata', () => {
