@@ -58,6 +58,7 @@ import {
   buildEmbeddedYoutubeUrl,
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
+  countPendingApprovalItems,
   normalizeSponsorRecord,
   resolveLiveBroadcastState,
   resolveMatchEventSelection,
@@ -188,6 +189,23 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(visitors.every((visitor) => /^visitor\d+@leaguehub\.com$/.test(visitor.email))).toBe(true)
     expect(visitors.every((visitor) => typeof visitor.password === 'string' && visitor.password.length >= 8)).toBe(true)
     expect(new Set(visitors.map((visitor) => visitor.email)).size).toBe(4)
+  })
+
+  it('counts pending team registrations and pending role requests together', () => {
+    const teams = [
+      { id: 'team-1', name: 'A', shortName: 'A', city: 'X', status: 'Beklemede', managerId: 'user-1', players: [] },
+      { id: 'team-2', name: 'B', shortName: 'B', city: 'Y', status: 'Onaylı', managerId: 'user-2', players: [] },
+      { id: 'team-3', name: 'C', shortName: 'C', city: 'Z', status: 'Beklemede', managerId: 'user-3', players: [] },
+    ] as any
+
+    const users = [
+      { id: 'user-1', teamManagerRequest: false, role: 'Visitor' },
+      { id: 'user-2', teamManagerRequest: true, role: 'Visitor' },
+      { id: 'user-3', teamManagerRequest: true, role: 'USER' },
+      { id: 'user-4', teamManagerRequest: false, role: 'Visitor' },
+    ] as any
+
+    expect(countPendingApprovalItems(teams, users, 2)).toBe(4)
   })
 
   it('keeps team ownership data on user rows while dropping stale fields', () => {
