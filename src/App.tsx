@@ -353,11 +353,9 @@ function App() {
 function AppShell() {
   const { appState, session, authLoading, logout } = useAppContext()
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([])
-  const [pendingRoleRequestsCount, setPendingRoleRequestsCount] = useState(0)
   const safeUsers = Array.isArray(appState?.users) ? appState.users : []
   const safeTeams = Array.isArray(appState?.teams) ? appState.teams : []
   const safeTournaments = Array.isArray(appState?.tournaments) ? appState.tournaments : []
-  const pendingApprovalsCount = countPendingApprovalItems(safeTeams, safeUsers, pendingRoleRequestsCount)
 
   useEffect(() => {
     let ignore = false
@@ -382,33 +380,6 @@ function AppShell() {
       ignore = true
     }
   }, [])
-
-  useEffect(() => {
-    let ignore = false
-
-    const loadPendingRoleRequests = async () => {
-      const { data, error } = await supabase
-        .from('role_requests')
-        .select('status')
-
-      if (error) {
-        console.warn('[LeagueHub] Pending role requests count load failed:', error)
-        if (!ignore) {
-          setPendingRoleRequestsCount(0)
-        }
-        return
-      }
-
-      if (!ignore) {
-        setPendingRoleRequestsCount((data ?? []).filter((row: any) => row?.status === 'Beklemede').length)
-      }
-    }
-
-    void loadPendingRoleRequests()
-    return () => {
-      ignore = true
-    }
-  }, [safeUsers, safeTeams])
 
   if (authLoading) {
     return (
@@ -3160,7 +3131,36 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
   const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, refreshData } = useAppContext()
+  const [pendingRoleRequestsCount, setPendingRoleRequestsCount] = useState(0)
   const [requestSent, setRequestSent] = useState(false)
+
+  useEffect(() => {
+    let ignore = false
+
+    const loadPendingRoleRequests = async () => {
+      const { data, error } = await supabase
+        .from('role_requests')
+        .select('status')
+
+      if (error) {
+        console.warn('[LeagueHub] Pending role requests count load failed:', error)
+        if (!ignore) {
+          setPendingRoleRequestsCount(0)
+        }
+        return
+      }
+
+      if (!ignore) {
+        setPendingRoleRequestsCount((data ?? []).filter((row: any) => row?.status === 'Beklemede').length)
+      }
+    }
+
+    void loadPendingRoleRequests()
+    return () => {
+      ignore = true
+    }
+  }, [appState.users, safeTeams])
+
   const [newPlayerForm, setNewPlayerForm] = useState({
     teamId: '',
     name: '',
@@ -3907,7 +3907,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     { label: 'Toplam Kullanıcı', value: appState.users.length, tone: 'text-cyan-300', accent: 'from-cyan-500/15 to-cyan-500/5' },
     { label: 'Aktif Turnuva', value: safeTournaments.filter((tournament) => tournament.status !== 'Turnuva Bitti').length, tone: 'text-emerald-300', accent: 'from-emerald-500/15 to-emerald-500/5' },
     { label: 'Takım Sayısı', value: safeTeams.length, tone: 'text-violet-300', accent: 'from-violet-500/15 to-violet-500/5' },
-    { label: 'Onay Bekleyen', value: pendingApprovalsCount, tone: 'text-amber-300', accent: 'from-amber-500/15 to-amber-500/5' },
+    { label: 'Onay Bekleyen', value: countPendingApprovalItems(safeTeams, appState.users, pendingRoleRequestsCount), tone: 'text-amber-300', accent: 'from-amber-500/15 to-amber-500/5' },
   ]
 
   const adminTabs = [
