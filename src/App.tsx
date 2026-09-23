@@ -841,9 +841,16 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
     setMessage('')
 
     try {
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      const authenticatedUser = authData?.user
+
+      if (authError || !authenticatedUser?.id) {
+        throw new Error(authError?.message ?? 'Aktif oturum bulunamadı. Lütfen tekrar giriş yapın.')
+      }
+
       const payload = {
         id: myProfile?.id ?? crypto.randomUUID(),
-        user_id: currentUser.id,
+        user_id: authenticatedUser.id,
         full_name: fullName,
         hospital,
         position: form.position,
@@ -859,7 +866,7 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
             position: payload.position,
             phone: payload.phone,
             avatar_url: payload.avatar_url,
-          }).eq('id', myProfile.id)
+          }).eq('id', myProfile.id).eq('user_id', authenticatedUser.id)
         : supabase.from('transfer_market').insert([payload])
 
       const { error } = await operation
@@ -884,7 +891,19 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
     if (!confirmed) return
 
     try {
-      const { error } = await supabase.from('transfer_market').delete().eq('id', myProfile.id)
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      const authenticatedUser = authData?.user
+
+      if (authError || !authenticatedUser?.id) {
+        throw new Error(authError?.message ?? 'Aktif oturum bulunamadı. Lütfen tekrar giriş yapın.')
+      }
+
+      const { error } = await supabase
+        .from('transfer_market')
+        .delete()
+        .eq('id', myProfile.id)
+        .eq('user_id', authenticatedUser.id)
+
       if (error) {
         throw error
       }
@@ -1042,6 +1061,31 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
                 .slice(0, 2)
                 .join('')
                 .toUpperCase() || 'P'
+              const canDeleteTransferEntry = currentUser?.role === 'Super Admin' || currentUser?.id === player.userId
+
+              const deleteTransferEntry = async () => {
+                if (!canDeleteTransferEntry) return
+
+                const confirmed = window.confirm(`${player.fullName} kaydını transfer listesinden silmek istediğinize emin misiniz?`)
+                if (!confirmed) return
+
+                try {
+                  const { error } = await supabase
+                    .from('transfer_market')
+                    .delete()
+                    .eq('id', player.id)
+
+                  if (error) {
+                    throw error
+                  }
+
+                  setPlayers((current) => current.filter((item) => item.id !== player.id))
+                  setMessage('Oyuncu transfer listesinden silindi.')
+                } catch (error: any) {
+                  console.error('[LeagueHub] Transfer market delete failed:', error)
+                  setMessage(error?.message ?? 'Oyuncu silinemedi.')
+                }
+              }
 
               return (
                 <article key={player.id} className="rounded-[24px] border border-slate-800 bg-slate-950/60 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
@@ -1060,11 +1104,25 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
                       </div>
                     </div>
 
-                    {currentUser?.id === player.userId ? (
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.17em] text-emerald-200">
-                        Siz
-                      </span>
-                    ) : null}
+                    <div className="flex items-center gap-2">
+                      {currentUser?.id === player.userId ? (
+                        <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.17em] text-emerald-200">
+                          Siz
+                        </span>
+                      ) : null}
+
+                      {canDeleteTransferEntry ? (
+                        <button
+                          type="button"
+                          onClick={() => void deleteTransferEntry()}
+                          aria-label={`${player.fullName} kaydını sil`}
+                          title="Sil"
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/10 text-red-200 transition hover:border-red-400 hover:bg-red-500/20"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
 
                   <div className="mt-4 space-y-2 text-sm text-slate-300">
