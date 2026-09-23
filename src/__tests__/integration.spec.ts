@@ -32,6 +32,7 @@ import {
   isTournamentRegistrationOpen,
   normalizeUsername,
   registerTeamForTournament,
+  removeTeamById,
   removeTournamentById,
   restoreSession,
   saveSession,
@@ -206,6 +207,39 @@ describe('LeagueHub – full integration scenarios', () => {
     ] as any
 
     expect(countPendingApprovalItems(teams, users, 2)).toBe(4)
+  })
+
+  it('removes a team id from tournament references and keeps the rest of the roster intact', () => {
+    const tournaments = [
+      {
+        id: 'tournament-1',
+        name: 'Spring Cup',
+        status: 'Kayıt Açık',
+        startDate: '2026-03-01',
+        scoring: { win: 3, draw: 1, loss: 0 },
+        yellowCardRule: 2,
+        teams: ['team-1', 'team-2', 'team-3'],
+        registeredTeamIds: ['team-1', 'team-2', 'team-3'],
+        fixtures: [],
+      },
+      {
+        id: 'tournament-2',
+        name: 'Another Cup',
+        status: 'Kayıt Açık',
+        startDate: '2026-03-10',
+        scoring: { win: 3, draw: 1, loss: 0 },
+        yellowCardRule: 2,
+        teams: ['team-2', 'team-3'],
+        registeredTeamIds: ['team-2', 'team-3'],
+        fixtures: [],
+      },
+    ] as any
+
+    const nextTournaments = removeTeamById(tournaments, 'team-1')
+
+    expect(nextTournaments[0].teams).toEqual(['team-2', 'team-3'])
+    expect(nextTournaments[0].registeredTeamIds).toEqual(['team-2', 'team-3'])
+    expect(nextTournaments[1].teams).toEqual(['team-2', 'team-3'])
   })
 
   it('keeps team ownership data on user rows while dropping stale fields', () => {

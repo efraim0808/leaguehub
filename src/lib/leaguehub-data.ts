@@ -465,6 +465,13 @@ export const createTournamentDraft = (
 export const removeTournamentById = (tournaments: Tournament[], tournamentId: string): Tournament[] =>
   tournaments.filter((tournament) => tournament.id !== tournamentId)
 
+export const removeTeamById = (tournaments: Tournament[], teamId: string): Tournament[] =>
+  tournaments.map((tournament) => ({
+    ...tournament,
+    teams: (tournament.teams ?? []).filter((id) => id !== teamId),
+    registeredTeamIds: (tournament.registeredTeamIds ?? tournament.teams ?? []).filter((id) => id !== teamId),
+  }))
+
 export const buildTournamentUpdatePayload = (tournament: Tournament) => {
   const nameValue = (tournament.name ?? '').trim() || 'Turnuva'
   const titleValue = (tournament.name ?? '').trim() || 'Turnuva'

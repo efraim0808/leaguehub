@@ -3159,7 +3159,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   sponsors: SponsorRecord[]
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
-  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, resolvePasswordResetRequest, addPlayerToTeam, refreshData } = useAppContext()
+  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, refreshData } = useAppContext()
   const [requestSent, setRequestSent] = useState(false)
   const [newPlayerForm, setNewPlayerForm] = useState({
     teamId: '',
@@ -3201,6 +3201,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     yellowCardRule: 2,
   })
   const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '' })
+  const [isSubmittingAnnouncement, setIsSubmittingAnnouncement] = useState(false)
+  const [deletingAnnouncementIds, setDeletingAnnouncementIds] = useState<Record<string, boolean>>({})
   const [liveBroadcastForm, setLiveBroadcastForm] = useState({ youtubeUrl: '', isLive: false })
   const [fixtureCustomTime, setFixtureCustomTime] = useState('')
   const [isCreatingTournament, setIsCreatingTournament] = useState(false)
@@ -3548,23 +3550,57 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     setPlayerEditor(null)
   }
 
-  const handleAddAnnouncement = async () => {
-    if (!announcementForm.title.trim() || !announcementForm.body.trim()) return
-    const nextAnnouncement = {
-      title: announcementForm.title.trim(),
-      content: announcementForm.body.trim(),
-      created_at: new Date().toISOString(),
+  const handleAddAnnouncement = async (event?: React.FormEvent<HTMLFormElement>) => {
+    event?.preventDefault()
+
+    const cleanTitle = announcementForm.title.trim()
+    const cleanBody = announcementForm.body.trim()
+
+    if (!cleanTitle || !cleanBody || isSubmittingAnnouncement) return
+
+    setIsSubmittingAnnouncement(true)
+
+    try {
+      const { error } = await supabase.from('announcements').insert([
+        { title: cleanTitle, content: cleanBody, created_at: new Date().toISOString() },
+      ])
+
+      if (error) {
+        throw error
+      }
+
+      await refreshData()
+      setAnnouncementForm({ title: '', body: '' })
+    } catch (error) {
+      console.error('Announcement insert failed:', error)
+      window.alert('Duyuru kaydedilemedi. Lütfen tekrar deneyin.')
+    } finally {
+      setIsSubmittingAnnouncement(false)
     }
-    await supabase.from('announcements').insert([{ title: nextAnnouncement.title, content: nextAnnouncement.content }])
-    await refreshData()
-    setAnnouncementForm({ title: '', body: '' })
   }
 
   const handleDeleteAnnouncement = async (announcementId: string) => {
-    await updateAppState({
-      ...appState,
-      announcements: appState.announcements.filter((item) => item.id !== announcementId),
-    })
+    if (!announcementId || deletingAnnouncementIds[announcementId]) return
+
+    setDeletingAnnouncementIds((current) => ({ ...current, [announcementId]: true }))
+
+    try {
+      const { error } = await supabase.from('announcements').delete().eq('id', announcementId)
+      if (error) {
+        throw error
+      }
+
+      await refreshData()
+    } catch (error) {
+      console.error('Announcement delete failed:', error)
+      window.alert('Duyuru silinemedi. Supabase kayıt kontrolü ve ID doğrulaması yapın.')
+    } finally {
+      setDeletingAnnouncementIds((current) => {
+        const next = { ...current }
+        delete next[announcementId]
+        return next
+      })
+    }
   }
 
   const loadLiveBroadcastSettingsForm = async () => {
@@ -3923,18 +3959,12 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     const confirmed = window.confirm(`${team.name} takımı silinsin mi?`)
     if (!confirmed) return
 
-    const nextTeams = safeTeams.filter((item) => item.id !== teamId)
-    const nextTournaments = appState.tournaments.map((tournament) => ({
-      ...tournament,
-      teams: (tournament.teams ?? []).filter((id) => id !== teamId),
-      registeredTeamIds: (tournament.registeredTeamIds ?? []).filter((id) => id !== teamId),
-    }))
-
-    await updateAppState({
-      ...appState,
-      teams: nextTeams,
-      tournaments: nextTournaments,
-    })
+    try {
+      await deleteTeam(teamId)
+    } catch (error) {
+      console.error('Team delete failed from UI:', error)
+      window.alert('Takım silinemedi. Supabase kaydı ve ilişkileri kontrol ediliyor.')
+    }
   }
 
   const profileSummaryCards = (() => {
@@ -4640,7 +4670,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                  <form onSubmit={(event) => { void handleAddAnnouncement(event) }} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
                     <div className="grid gap-3 md:grid-cols-2">
                       <label className="text-sm text-slate-300 md:col-span-2">
                         Duyuru başlığı
@@ -4651,8 +4681,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                         <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm({ ...announcementForm, body: event.target.value })} className="mt-1 min-h-28 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" placeholder="Turnuva detaylarını ve önemli duyuruları yazın..." />
                       </label>
                     </div>
-                    <button type="button" onClick={() => void handleAddAnnouncement()} className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950">Duyuru Yayınla / Kaydet</button>
-                  </div>
+                    <button type="submit" disabled={isSubmittingAnnouncement} className="mt-4 w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-70">{isSubmittingAnnouncement ? 'Kaydediliyor...' : 'Duyuru Yayınla / Kaydet'}</button>
+                  </form>
 
                   <div className="space-y-3">
                     <div className="text-sm font-semibold text-white">Mevcut Duyurular</div>
@@ -4668,7 +4698,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                           <button
                             type="button"
                             onClick={() => void handleDeleteAnnouncement(item.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                            disabled={Boolean(deletingAnnouncementIds[item.id])}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                             aria-label={`${item.title} duyurusunu sil`}
                             title="Duyuruyu sil"
                           >
@@ -5131,7 +5162,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
               ) : null}
 
               {adminModal === 'home' ? (
-                <div className="space-y-4">
+                <form onSubmit={(event) => { void handleAddAnnouncement(event) }} className="space-y-4">
                   <div className="grid gap-3 md:grid-cols-2">
                     <label className="text-sm text-slate-300">
                       Duyuru başlığı
@@ -5142,7 +5173,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                       <textarea value={announcementForm.body} onChange={(event) => setAnnouncementForm({ ...announcementForm, body: event.target.value })} className="mt-1 min-h-24 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
                     </label>
                   </div>
-                  <button type="button" onClick={() => void handleAddAnnouncement()} className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950">Duyuru Ekle</button>
+                  <button type="submit" disabled={isSubmittingAnnouncement} className="w-full rounded-2xl bg-gradient-to-r from-cyan-400 to-emerald-400 px-4 py-3 font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-70">{isSubmittingAnnouncement ? 'Kaydediliyor...' : 'Duyuru Ekle'}</button>
 
                   <div className="space-y-3">
                     <div className="text-sm font-semibold text-white">Mevcut Duyurular</div>
@@ -5158,7 +5189,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                           <button
                             type="button"
                             onClick={() => void handleDeleteAnnouncement(item.id)}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15"
+                            disabled={Boolean(deletingAnnouncementIds[item.id])}
+                            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-red-500/30 bg-red-500/10 text-red-300 transition hover:bg-red-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                             aria-label={`${item.title} duyurusunu sil`}
                             title="Duyuruyu sil"
                           >
@@ -5168,7 +5200,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                       ))
                     )}
                   </div>
-                </div>
+                </form>
               ) : null}
 
               {adminModal === 'sponsors' ? (

@@ -929,6 +929,7 @@ interface AppContextType {
     logoUrl?: string
   }) => Promise<void>
   updateTeam: (team: Team) => Promise<void>
+  deleteTeam: (teamId: string) => Promise<void>
   updatePlayerDiscipline: (teamId: string, playerId: string, discipline: { yellowCards: number; redCards: number; suspensionMatches?: number; isSuspended: boolean }) => Promise<void>
   setAppState: Dispatch<SetStateAction<AppState>>
   updateAppState: (nextState: AppState) => Promise<void>
@@ -1363,6 +1364,90 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!error) {
       await refreshData()
     }
+  }
+
+  const deleteTeam = async (teamId: string) => {
+    if (!teamId) return
+
+    const teamToDelete = appState.teams.find((item) => item.id === teamId)
+    if (!teamToDelete) return
+
+    const relevantTournaments = appState.tournaments.filter((tournament) =>
+      (tournament.teams ?? []).includes(teamId) || (tournament.registeredTeamIds ?? []).includes(teamId),
+    )
+
+    const teamArrayCleanup = relevantTournaments.map((tournament) => ({
+      id: tournament.id,
+      teams: (tournament.teams ?? []).filter((id) => id !== teamId),
+      registeredTeamIds: (tournament.registeredTeamIds ?? tournament.teams ?? []).filter((id) => id !== teamId),
+    }))
+
+    const tournamentUpdateResults = await Promise.all(
+      teamArrayCleanup.map(({ id, teams, registeredTeamIds }) =>
+        supabase
+          .from('tournaments')
+          .update({
+            teams,
+            registered_team_ids: registeredTeamIds,
+          })
+          .eq('id', id),
+      ),
+    )
+
+    const tournamentUpdateError = tournamentUpdateResults.find((result) => !!result.error)
+    if (tournamentUpdateError?.error) {
+      console.error('Tournament cleanup failed during team delete:', tournamentUpdateError.error)
+      throw tournamentUpdateError.error
+    }
+
+    const { error: userCleanupError } = await supabase.from('users').update({ team_id: null }).eq('team_id', teamId)
+    if (userCleanupError) {
+      console.error('User team linkage cleanup failed during team delete:', userCleanupError)
+      throw userCleanupError
+    }
+
+    const { error: teamDeleteError } = await supabase.from('teams').delete().eq('id', teamId)
+    if (teamDeleteError) {
+      console.error('Team delete failed:', teamDeleteError)
+      throw teamDeleteError
+    }
+
+    const nextTeams = appState.teams.filter((item) => item.id !== teamId)
+    const nextTournaments = appState.tournaments.map((tournament) => ({
+      ...tournament,
+      teams: (tournament.teams ?? []).filter((id) => id !== teamId),
+      registeredTeamIds: (tournament.registeredTeamIds ?? tournament.teams ?? []).filter((id) => id !== teamId),
+    }))
+    const nextUsers = appState.users.map((user) =>
+      user.teamId === teamId ? { ...user, teamId: undefined } : user,
+    )
+
+    setAppState((current) => ({
+      ...current,
+      teams: current.teams.filter((item) => item.id !== teamId),
+      tournaments: current.tournaments.map((tournament) => ({
+        ...tournament,
+        teams: (tournament.teams ?? []).filter((id) => id !== teamId),
+        registeredTeamIds: (tournament.registeredTeamIds ?? tournament.teams ?? []).filter((id) => id !== teamId),
+      })),
+      users: current.users.map((user) => (user.teamId === teamId ? { ...user, teamId: undefined } : user)),
+    }))
+
+    persistLocalFallbackState({
+      ...appState,
+      teams: nextTeams,
+      tournaments: nextTournaments,
+      users: nextUsers,
+    })
+
+    if (session?.teamId === teamId) {
+      setSessionState({
+        ...session,
+        teamId: undefined,
+      })
+    }
+
+    await refreshData()
   }
 
   const updatePlayerDiscipline = async (teamId: string, playerId: string, discipline: { yellowCards: number; redCards: number; suspensionMatches?: number; isSuspended: boolean }) => {
@@ -2191,6 +2276,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       logout,
       createTeam,
       updateTeam,
+      deleteTeam,
       updatePlayerDiscipline,
       setAppState,
       updateAppState,
