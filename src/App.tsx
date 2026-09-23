@@ -785,6 +785,26 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [message, setMessage] = useState('')
 
+  const resolvedSessionSnapshot = (() => {
+    if (typeof window === 'undefined') return null
+
+    try {
+      const raw = window.localStorage.getItem('leaguehub-session')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  })()
+  const resolvedUserId = currentUser?.id ?? resolvedSessionSnapshot?.id ?? ''
+  const resolvedRole = String(currentUser?.role ?? resolvedSessionSnapshot?.role ?? '').trim()
+  const isSuperAdmin = (() => {
+    const normalized = resolvedRole.toLowerCase()
+    return normalized === 'super admin'
+      || normalized === 'super_admin'
+      || normalized === 'süper admin'
+      || normalized === 'süper_admin'
+  })()
+
   useEffect(() => {
     if (!currentUser) return
     setForm((previous) => ({
@@ -1061,7 +1081,8 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
                 .slice(0, 2)
                 .join('')
                 .toUpperCase() || 'P'
-              const canDeleteTransferEntry = currentUser?.role === 'Super Admin' || currentUser?.id === player.userId
+              const isRecordOwner = Boolean(resolvedUserId && player.userId === resolvedUserId)
+              const canDeleteTransferEntry = isSuperAdmin || isRecordOwner
 
               const deleteTransferEntry = async () => {
                 if (!canDeleteTransferEntry) return
