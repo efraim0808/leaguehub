@@ -60,7 +60,9 @@ import {
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
   countPendingApprovalItems,
+  filterTransferMarketPlayers,
   normalizeSponsorRecord,
+  normalizeTransferMarketPlayer,
   resolveLiveBroadcastState,
   resolveMatchEventSelection,
   resolveTournamentSubmitButtonState,
@@ -117,6 +119,25 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(emptyState.isLive).toBe(false)
     expect(emptyState.streamUrl).toBe('')
     expect(emptyState.embedUrl).toBe('')
+  })
+
+  it('normalizes and filters transfer market player rows consistently', () => {
+    const rows = [
+      { id: '1', user_id: 'user-1', full_name: 'Ahmet Yılmaz', hospital: 'Merkez Hastane', position: 'DEF', phone: '+905551234567', avatar_url: 'https://example.com/a.png', created_at: '2026-01-01T00:00:00Z' },
+      { id: '2', user_id: 'user-2', full_name: 'Mehmet Aşık', hospital: 'Körfez Hastanesi', position: 'KL', phone: '05551234567', avatar_url: '', created_at: '2026-01-01T00:00:00Z' },
+      { id: '3', user_id: 'user-3', full_name: 'Emre Can', hospital: 'Şehir Hastanesi', position: 'FOR', phone: '+905551234568', avatar_url: null, created_at: '2026-01-01T00:00:00Z' },
+    ]
+
+    const normalized = rows.map((row) => normalizeTransferMarketPlayer(row))
+
+    expect(normalized[0].position).toBe('DEF')
+    expect(normalized[0].hospital).toBe('Merkez Hastane')
+    expect(normalized[1].avatarUrl).toBe('')
+    expect(normalized[2].phone).toBe('+905551234568')
+
+    const filtered = filterTransferMarketPlayers(normalized, 'KL')
+    expect(filtered).toHaveLength(1)
+    expect(filtered[0].fullName).toBe('Mehmet Aşık')
   })
 
   it('registers a visitor with uppercase username, KVKK consent and manager request flow', () => {

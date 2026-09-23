@@ -83,6 +83,19 @@ export interface PlayerInput {
   tournamentId?: string
 }
 
+export type TransferMarketPosition = 'KL' | 'DEF' | 'ORT' | 'FOR'
+
+export interface TransferMarketPlayer {
+  id: string
+  userId: string
+  fullName: string
+  hospital: string
+  position: TransferMarketPosition
+  phone: string
+  avatarUrl?: string
+  createdAt: string
+}
+
 export interface TournamentScoring {
   win: number
   draw: number

@@ -44,6 +44,7 @@ const navItems = [
   { to: '/standings', label: 'Puan Durumu', icon: BarChart3 },
   { to: '/fixtures', label: 'Fikstür', icon: CalendarDays },
   { to: '/live', label: 'Canlı Skor', icon: PlayCircle },
+  { to: '/transfer-market', label: 'Transfer Pazarı', icon: Star },
   { to: '/gallery', label: 'Galeri', icon: Camera },
   { to: '/profile', label: 'Profilim', icon: UserRound },
 ]
@@ -237,6 +238,27 @@ export const buildFixtureRowsFromMatches = (matches: Match[], tournamentId: stri
     if (byDate !== 0) return byDate
     return a.time.localeCompare(b.time)
   })
+}
+
+export const normalizeTransferMarketPlayer = (row: any) => {
+  const rawPosition = String(row?.position ?? row?.mevki ?? 'KL').trim().toUpperCase()
+  const position = ['KL', 'DEF', 'ORT', 'FOR'].includes(rawPosition) ? rawPosition as 'KL' | 'DEF' | 'ORT' | 'FOR' : 'KL'
+
+  return {
+    id: String(row?.id ?? crypto.randomUUID()),
+    userId: String(row?.user_id ?? row?.userId ?? ''),
+    fullName: String(row?.full_name ?? row?.fullName ?? '').trim(),
+    hospital: String(row?.hospital ?? '').trim(),
+    position,
+    phone: String(row?.phone ?? '').trim(),
+    avatarUrl: typeof row?.avatar_url === 'string' ? row.avatar_url.trim() : (typeof row?.avatarUrl === 'string' ? row.avatarUrl.trim() : ''),
+    createdAt: String(row?.created_at ?? row?.createdAt ?? new Date().toISOString()),
+  }
+}
+
+export const filterTransferMarketPlayers = (players: ReturnType<typeof normalizeTransferMarketPlayer>[], positionFilter: string) => {
+  if (!positionFilter || positionFilter === 'Tümü') return players
+  return players.filter((player) => player.position === positionFilter)
 }
 
 function TeamLogo({ team, size = 36 }: { team?: Team | null; size?: number }) {
@@ -469,13 +491,14 @@ function AppShell() {
           <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} />} />
           <Route path="/stats" element={<Navigate to="/standings" replace />} />
           <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} canManageMatchControls={canAccessLiveMatchControls} />} />
+          <Route path="/transfer-market" element={<TransferMarketPage currentUser={currentUser} />} />
           <Route path="/gallery" element={<GalleryPage currentUser={currentUser} />} />
           <Route path="/profile" element={<ProfilePage currentUser={currentUser} safeTeams={safeTeams} safeTournaments={safeTournaments} sponsors={sponsors} setSponsors={setSponsors} />} />
         </Routes>
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-800 bg-slate-950/90 backdrop-blur-xl">
-        <div className="mx-auto grid max-w-6xl grid-cols-3 gap-1 px-1.5 py-1.5 sm:grid-cols-6">
+        <div className="mx-auto grid max-w-6xl grid-cols-3 gap-1 px-1.5 py-1.5 sm:grid-cols-7">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
@@ -744,6 +767,333 @@ function AuthScreen() {
           </div>
         </div>
       ) : null}
+    </div>
+  )
+}
+
+function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
+  const [players, setPlayers] = useState<ReturnType<typeof normalizeTransferMarketPlayer>[]>([])
+  const [positionFilter, setPositionFilter] = useState<'Tümü' | 'KL' | 'DEF' | 'ORT' | 'FOR'>('Tümü')
+  const [form, setForm] = useState({
+    fullName: currentUser?.fullName ?? '',
+    hospital: '',
+    position: 'KL' as 'KL' | 'DEF' | 'ORT' | 'FOR',
+    phone: currentUser?.phone ?? '',
+    avatarUrl: '',
+  })
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [message, setMessage] = useState('')
+
+  useEffect(() => {
+    if (!currentUser) return
+    setForm((previous) => ({
+      ...previous,
+      fullName: currentUser.fullName || previous.fullName,
+      phone: currentUser.phone || previous.phone,
+    }))
+  }, [currentUser])
+
+  const loadPlayers = async () => {
+    setIsLoading(true)
+    const { data, error } = await supabase
+      .from('transfer_market')
+      .select('*')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('[LeagueHub] Transfer market load failed:', error)
+      setPlayers([])
+      setMessage('Transfer pazarı verisi yüklenemedi.')
+      setIsLoading(false)
+      return
+    }
+
+    setPlayers((data ?? []).map(normalizeTransferMarketPlayer))
+    setIsLoading(false)
+  }
+
+  useEffect(() => {
+    void loadPlayers()
+  }, [])
+
+  const myProfile = currentUser ? players.find((player) => player.userId === currentUser.id) ?? null : null
+
+  const filteredPlayers = filterTransferMarketPlayers(players, positionFilter)
+
+  const handleSaveProfile = async () => {
+    if (!currentUser) {
+      setMessage('Transfer listesine eklemek için önce giriş yapmanız gerekir.')
+      return
+    }
+
+    const fullName = form.fullName.trim()
+    const hospital = form.hospital.trim()
+    const phone = form.phone.trim()
+    const avatarUrl = form.avatarUrl.trim()
+
+    if (!fullName || !hospital || !phone) {
+      setMessage('Ad soyad, birim/hastane ve telefon alanları zorunludur.')
+      return
+    }
+
+    setIsSubmitting(true)
+    setMessage('')
+
+    try {
+      const payload = {
+        id: myProfile?.id ?? crypto.randomUUID(),
+        user_id: currentUser.id,
+        full_name: fullName,
+        hospital,
+        position: form.position,
+        phone,
+        avatar_url: avatarUrl || null,
+        created_at: myProfile?.createdAt ?? new Date().toISOString(),
+      }
+
+      const operation = myProfile
+        ? supabase.from('transfer_market').update({
+            full_name: payload.full_name,
+            hospital: payload.hospital,
+            position: payload.position,
+            phone: payload.phone,
+            avatar_url: payload.avatar_url,
+          }).eq('id', myProfile.id)
+        : supabase.from('transfer_market').insert([payload])
+
+      const { error } = await operation
+      if (error) {
+        throw error
+      }
+
+      await loadPlayers()
+      setMessage(myProfile ? 'Profiliniz transfer listesinde güncellendi.' : 'Profiliniz transfer listesine eklendi.')
+    } catch (error: any) {
+      console.error('[LeagueHub] Transfer market save failed:', error)
+      setMessage(error?.message ?? 'Profil kaydedilemedi. Lütfen tekrar deneyin.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleRemoveProfile = async () => {
+    if (!myProfile) return
+
+    const confirmed = window.confirm('Transfer listesinden profilinizi çıkarmak istediğinize emin misiniz?')
+    if (!confirmed) return
+
+    try {
+      const { error } = await supabase.from('transfer_market').delete().eq('id', myProfile.id)
+      if (error) {
+        throw error
+      }
+
+      setForm({
+        fullName: currentUser?.fullName ?? '',
+        hospital: '',
+        position: 'KL',
+        phone: currentUser?.phone ?? '',
+        avatarUrl: '',
+      })
+      await loadPlayers()
+      setMessage('Profiliniz transfer listesinden kaldırıldı.')
+    } catch (error: any) {
+      console.error('[LeagueHub] Transfer market profile delete failed:', error)
+      setMessage(error?.message ?? 'Profil silinemedi.')
+    }
+  }
+
+  const positionOptions: Array<'Tümü' | 'KL' | 'DEF' | 'ORT' | 'FOR'> = ['Tümü', 'KL', 'DEF', 'ORT', 'FOR']
+
+  return (
+    <div className="space-y-5 pb-28">
+      <div className="rounded-[28px] border border-slate-800 bg-[linear-gradient(135deg,rgba(14,165,233,0.15),rgba(15,23,42,1)_35%,rgba(15,23,42,1))] p-4 shadow-[0_18px_48px_rgba(14,116,144,0.18)]">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.32em] text-cyan-300">Transfer</div>
+            <h2 className="mt-2 text-2xl font-black text-white">Transfer Pazarı</h2>
+          </div>
+          <div className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200">
+            {players.length} oyuncu
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.25)]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Profil</div>
+            <h3 className="mt-2 text-xl font-black text-white">{myProfile ? 'Transfer profilini güncelle' : 'Kendini transfer listesine ekle'}</h3>
+          </div>
+          {myProfile ? (
+            <button
+              type="button"
+              onClick={() => void handleRemoveProfile()}
+              className="rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-red-200"
+            >
+              Listeden Çıkar
+            </button>
+          ) : null}
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="text-sm text-slate-300">
+            Ad Soyad
+            <input
+              value={form.fullName}
+              onChange={(event) => setForm((previous) => ({ ...previous, fullName: event.target.value }))}
+              className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+              placeholder="Örn: Ahmet Yılmaz"
+            />
+          </label>
+
+          <label className="text-sm text-slate-300">
+            Birim / Hastane
+            <input
+              value={form.hospital}
+              onChange={(event) => setForm((previous) => ({ ...previous, hospital: event.target.value }))}
+              className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+              placeholder="Örn: Merkez Hastane"
+            />
+          </label>
+
+          <label className="text-sm text-slate-300">
+            Mevki
+            <select
+              value={form.position}
+              onChange={(event) => setForm((previous) => ({ ...previous, position: event.target.value as 'KL' | 'DEF' | 'ORT' | 'FOR' }))}
+              className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+            >
+              <option value="KL">KL</option>
+              <option value="DEF">DEF</option>
+              <option value="ORT">ORT</option>
+              <option value="FOR">FOR</option>
+            </select>
+          </label>
+
+          <label className="text-sm text-slate-300">
+            Telefon
+            <input
+              value={form.phone}
+              onChange={(event) => setForm((previous) => ({ ...previous, phone: event.target.value }))}
+              className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+              placeholder="+90 555 123 45 67"
+            />
+          </label>
+
+          <label className="text-sm text-slate-300 md:col-span-2">
+            Profil Resmi URL (Opsiyonel)
+            <input
+              value={form.avatarUrl}
+              onChange={(event) => setForm((previous) => ({ ...previous, avatarUrl: event.target.value }))}
+              className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white"
+              placeholder="https://..."
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="text-sm text-slate-400">{message || 'Listede görünmek için bilgilerinizi paylaşın.'}</div>
+          <button
+            type="button"
+            onClick={() => void handleSaveProfile()}
+            disabled={isSubmitting}
+            className="rounded-2xl bg-cyan-500 px-4 py-2.5 text-sm font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isSubmitting ? 'Kaydediliyor...' : myProfile ? 'Güncelle' : 'Transfer Listesine Ekle'}
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.25)]">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Liste</div>
+            <h3 className="mt-2 text-xl font-black text-white">Mevki filtrele</h3>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {positionOptions.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setPositionFilter(option)}
+                className={`rounded-full px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] transition ${positionFilter === option ? 'bg-cyan-500 text-slate-950' : 'border border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500 hover:text-white'}`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {isLoading ? (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5 text-sm text-slate-300">Transfer pazarı yükleniyor...</div>
+        ) : filteredPlayers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-5 text-sm text-slate-400">Seçili filtre için transfer listesi boş.</div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredPlayers.map((player) => {
+              const whatsappNumber = player.phone.replace(/\D/g, '')
+              const contactUrl = whatsappNumber ? `https://wa.me/${whatsappNumber}` : `tel:${player.phone}`
+              const initials = player.fullName
+                .split(' ')
+                .map((part) => part[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase() || 'P'
+
+              return (
+                <article key={player.id} className="rounded-[24px] border border-slate-800 bg-slate-950/60 p-4 shadow-[0_14px_36px_rgba(15,23,42,0.22)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-slate-700 bg-gradient-to-br from-cyan-500/20 to-slate-800 text-sm font-black text-cyan-200">
+                        {player.avatarUrl ? (
+                          <img src={player.avatarUrl} alt={player.fullName} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = 'none' }} />
+                        ) : (
+                          initials
+                        )}
+                      </div>
+                      <div>
+                        <div className="text-base font-black text-white">{player.fullName}</div>
+                        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">{player.position}</div>
+                      </div>
+                    </div>
+
+                    {currentUser?.id === player.userId ? (
+                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-[0.17em] text-emerald-200">
+                        Siz
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-sm text-slate-300">
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2">
+                      <span className="text-slate-400">Birim</span>
+                      <span className="font-semibold text-white">{player.hospital || 'Belirtilmedi'}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2">
+                      <span className="text-slate-400">İletişim</span>
+                      <span className="font-semibold text-white">{player.phone || 'Belirtilmedi'}</span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex gap-2">
+                    <a
+                      href={contactUrl}
+                      target={whatsappNumber ? '_blank' : undefined}
+                      rel={whatsappNumber ? 'noreferrer' : undefined}
+                      className="inline-flex flex-1 items-center justify-center rounded-2xl bg-cyan-500 px-3 py-2.5 text-sm font-black text-slate-950"
+                    >
+                      İletişime Geç
+                    </a>
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
