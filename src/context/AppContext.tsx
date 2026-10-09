@@ -206,6 +206,7 @@ export const sanitizeTeamPayload = (payload: Record<string, unknown>) => {
     'city',
     'status',
     'manager_id',
+    'tournament_id',
     'logo_url',
     'created_at',
   ])
@@ -1565,6 +1566,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       city: team.city,
       status: team.status,
       manager_id: team.managerId,
+      tournament_id: team.tournamentId ?? null,
       logo_url: team.logoUrl ?? null,
     }))
 
@@ -2004,7 +2006,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const tournament = appState.tournaments.find((entry) => entry.id === payload.tournamentId)
       const existingTeam = appState.teams.find((team) =>
-        team.name.trim().toLowerCase() === cleanTeamName.toLowerCase() && team.managerId === payload.userId,
+        team.name.trim().toLowerCase() === cleanTeamName.toLowerCase()
+        && team.managerId === payload.userId
+        && team.tournamentId === payload.tournamentId,
       )
 
       const { data: existingRegistrations, error: duplicateCheckError } = await supabase
@@ -2089,7 +2093,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await updateUserTeamId(payload.userId, teamId)
       await refreshData()
     } catch (error) {
-      console.warn('[LeagueHub] Tournament registration suppressed without blocking auth flow:', error)
+      console.error('[LeagueHub] Tournament registration failed:', error)
+      throw error
     }
   }
 
@@ -2111,7 +2116,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try {
       const teamId = application.teamId ?? appState.teams.find((team) =>
         team.name.trim().toLowerCase() === application.teamName.trim().toLowerCase()
-        && team.managerId === application.userId,
+        && team.managerId === application.userId
+        && team.tournamentId === application.tournamentId,
       )?.id ?? crypto.randomUUID()
 
       const existingTeam = appState.teams.find((team) => team.id === teamId)

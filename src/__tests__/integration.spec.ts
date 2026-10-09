@@ -60,6 +60,7 @@ import {
   buildFixtureRowsFromMatches,
   buildFixtureWeekGroups,
   countPendingApprovalItems,
+  filterTeamsForTournament,
   filterTransferMarketPlayers,
   normalizeSponsorRecord,
   normalizeTransferMarketPlayer,
@@ -577,7 +578,7 @@ describe('LeagueHub – full integration scenarios', () => {
       status: 'Onaylı',
       manager_id: 'mgr-1',
     })
-    expect(teamPayload).not.toHaveProperty('tournament_id')
+    expect(teamPayload).toHaveProperty('tournament_id', 'tourney-1')
     expect(teamPayload).not.toHaveProperty('legacy_field')
 
     const tournamentPayload = sanitizeTournamentPayload({
@@ -688,8 +689,8 @@ describe('LeagueHub – full integration scenarios', () => {
       short_name: 'İZM',
       city: 'İzmir',
       manager_id: 'mgr-1',
+      tournament_id: 'tourney-1',
     })
-    expect(teamPayload).not.toHaveProperty('tournament_id')
     expect(teamPayload).not.toHaveProperty('is_active')
 
     const playerPayload = sanitizePlayerPayload({
@@ -773,6 +774,17 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(payload).not.toHaveProperty('captain_name')
     expect(payload).not.toHaveProperty('phone')
     expect(payload).not.toHaveProperty('legacy_field')
+  })
+
+  it('filters teams by the exact selected tournament ID', () => {
+    const teams = [
+      { id: 'team-1', tournamentId: 'tourney-1' },
+      { id: 'team-2', tournamentId: 'tourney-2' },
+      { id: 'team-3', tournamentId: undefined },
+    ] as any
+
+    expect(filterTeamsForTournament(teams, 'tourney-1').map((team) => team.id)).toEqual(['team-1'])
+    expect(filterTeamsForTournament(teams, 'tourney-2').map((team) => team.id)).toEqual(['team-2'])
   })
 
   it('converts username input to a hidden leaguehub.local email for auth flows', () => {

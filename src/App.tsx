@@ -76,6 +76,9 @@ export const resolveTournamentSubmitButtonState = (isSubmitting: boolean) => ({
   label: isSubmitting ? 'Turnuva Oluşturuluyor...' : 'Turnuva Oluştur',
 })
 
+export const filterTeamsForTournament = (teams: Team[], tournamentId: string): Team[] =>
+  teams.filter((team) => team.tournamentId === tournamentId)
+
 const getLiveBooleanValue = (value: unknown): boolean => {
   if (typeof value === 'boolean') return value
 
@@ -1274,10 +1277,9 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
   )
 
   const getApprovedTeamsForTournament = (tournament: Tournament): Team[] => {
-    return appState.teams.filter((team) => {
+    return filterTeamsForTournament(appState.teams, tournament.id).filter((team) => {
       if (team.status !== 'Onaylı') return false
-      const matchesTournament = team.tournamentId === tournament.id || tournament.teams.includes(team.id) || tournament.registeredTeamIds?.includes(team.id)
-      return matchesTournament
+      return true
     })
   }
 
@@ -1294,7 +1296,8 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
 
     const existingTeam = appState.teams.find((team) =>
       team.name.trim().toLowerCase() === cleanTeamName.toLowerCase()
-      && (team.managerId === currentUser.id || team.id === currentUser.teamId),
+      && (team.managerId === currentUser.id || team.id === currentUser.teamId)
+      && team.tournamentId === selectedOpenTournament.id,
     )
 
     if (existingTeam && !canRegisterTeamToTournament(selectedOpenTournament, existingTeam.id)) {
@@ -4351,10 +4354,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   ] as const
 
   function getApprovedTeamsForTournament(tournament: Tournament): Team[] {
-    return safeTeams.filter((team) => {
+    return filterTeamsForTournament(safeTeams, tournament.id).filter((team) => {
       if (team.status !== 'Onaylı') return false
-      const matchesTournament = team.tournamentId === tournament.id || tournament.teams.includes(team.id) || tournament.registeredTeamIds?.includes(team.id)
-      return matchesTournament
+      return true
     })
   }
 
@@ -4470,7 +4472,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       return
     }
 
-    const resolvedTournamentId = team.tournamentId ?? appState.tournaments.find((item) => item.teams.includes(team.id) || item.registeredTeamIds?.includes(team.id))?.id
+    const resolvedTournamentId = team.tournamentId
     if (!resolvedTournamentId) {
       window.alert('Turnuva kimliği bulunamadığı için başvuru onayı yapılamadı.')
       return
@@ -4962,10 +4964,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
                   <div className="space-y-2">
                     {safeTournaments.map((tournament) => {
-                      const pendingApplications = safeTeams.filter((team) => {
-                        const matchesTournament = team.tournamentId === tournament.id || tournament.teams.includes(team.id) || tournament.registeredTeamIds?.includes(team.id)
-                        return matchesTournament && team.status === 'Beklemede'
-                      })
+                      const pendingApplications = filterTeamsForTournament(safeTeams, tournament.id)
+                        .filter((team) => team.status === 'Beklemede')
                       const approvedTeams = getApprovedTeamsForTournament(tournament)
 
                       return (
