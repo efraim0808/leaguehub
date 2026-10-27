@@ -32,6 +32,7 @@ import {
   createTournamentDraft,
   filterSelectablePlayers,
   generateAutoFixtures,
+  normalizeRoleKey,
   normalizeNumberInput,
 } from './lib/leaguehub-data'
 import { supabase } from './lib/supabase'
@@ -491,7 +492,7 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<HomePage currentUser={currentUser} safeTournaments={safeTournaments} sponsors={sponsors} />} />
           <Route path="/standings" element={<StandingsPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} />} />
-          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={activeUserRole === 'Super Admin'} />} />
+          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={normalizeRoleKey(activeUserRole) === 'super_admin'} />} />
           <Route path="/stats" element={<Navigate to="/standings" replace />} />
           <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} canManageMatchControls={canAccessLiveMatchControls} />} />
           <Route path="/transfer-market" element={<TransferMarketPage currentUser={currentUser} />} />
