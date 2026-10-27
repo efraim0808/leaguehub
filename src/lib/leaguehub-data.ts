@@ -1150,6 +1150,22 @@ export const createManualFixture = (
 export const FULL_WEEK_DAYS = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'] as const
 export const DEFAULT_FIXTURE_TIMES = ['18:00', '19:00', '20:00', '21:00'] as const
 
+export const normalizeFixtureDate = (dateValue: string): string => {
+  const date = dateValue.trim()
+  const isoDate = date.match(/^(\d{4}-\d{2}-\d{2})(?:\s*\([^)]*\))?$/)
+  return isoDate?.[1] ?? date
+}
+
+export const formatFixtureDateForDisplay = (dateValue: string): string => {
+  const date = normalizeFixtureDate(dateValue)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return dateValue
+
+  const weekday = new Date(`${date}T12:00:00Z`)
+    .toLocaleDateString('tr-TR', { weekday: 'long', timeZone: 'UTC' })
+    .toLocaleUpperCase('tr-TR')
+  return `${date} (${weekday})`
+}
+
 const DAY_ORDER = [...FULL_WEEK_DAYS]
 
 const generateRoundRobinRounds = (teamIds: string[]): Array<Array<[string, string]>> => {

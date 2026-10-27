@@ -27,9 +27,11 @@ import {
   buildTournamentUpdatePayload,
   createTournamentDraft,
   finalizeMatch,
+  formatFixtureDateForDisplay,
   generateAutoFixtures,
   hasPermission,
   isTournamentRegistrationOpen,
+  normalizeFixtureDate,
   normalizeUsername,
   registerTeamForTournament,
   removeTeamById,
@@ -86,6 +88,14 @@ const createStorage = () => {
 }
 
 describe('LeagueHub – full integration scenarios', () => {
+  it('keeps weekday labels in fixture display while normalizing dates for database writes', () => {
+    const formattedDate = '2026-09-23 (ÇARŞAMBA)'
+
+    expect(formatFixtureDateForDisplay('2026-09-23')).toBe(formattedDate)
+    expect(formatFixtureDateForDisplay(formattedDate)).toBe(formattedDate)
+    expect(normalizeFixtureDate(formattedDate)).toBe('2026-09-23')
+  })
+
   it('locks the tournament submit button while creation is in flight', () => {
     const busyState = resolveTournamentSubmitButtonState(true)
     const idleState = resolveTournamentSubmitButtonState(false)

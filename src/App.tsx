@@ -32,6 +32,8 @@ import {
   createTournamentDraft,
   filterSelectablePlayers,
   generateAutoFixtures,
+  formatFixtureDateForDisplay,
+  normalizeFixtureDate,
   normalizeRoleKey,
   normalizeNumberInput,
 } from './lib/leaguehub-data'
@@ -1825,7 +1827,7 @@ function FixtureWeekCarousel({
                 className={`rounded-[22px] border border-slate-800 bg-slate-950/80 p-3 shadow-[0_0_20px_rgba(15,23,42,0.25)] ${onSelectFixture ? 'cursor-pointer' : ''} ${isLive ? 'border-red-500/40 bg-red-500/5' : ''}`}
               >
                 <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                  <span className="font-bold text-slate-200">{fixture.date || 'Tarih belirtilmedi'} • {timeLabel}</span>
+                  <span className="font-bold text-slate-200">{fixture.date ? formatFixtureDateForDisplay(fixture.date) : 'Tarih belirtilmedi'} • {timeLabel}</span>
                   <div className="flex items-center gap-2">
                     {isLive ? <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-300">Canlı</span> : null}
                     {canManageFixtures ? (
@@ -2816,7 +2818,7 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     setFixtureEditor({
       id: fixture.id,
       week: fixture.week ?? selectedWeek,
-      date: fixture.date,
+      date: normalizeFixtureDate(fixture.date),
       time: fixture.time,
       homeTeamId: fixture.homeTeamId,
       awayTeamId: fixture.awayTeamId,
@@ -2932,7 +2934,8 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
               </label>
               <label className="space-y-1 text-xs font-semibold text-slate-300">
                 Tarih
-                <input required type="date" value={fixtureEditor.date} onChange={(event) => setFixtureEditor((current) => current ? { ...current, date: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                <input required type="date" value={normalizeFixtureDate(fixtureEditor.date)} onChange={(event) => setFixtureEditor((current) => current ? { ...current, date: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+                {fixtureEditor.date ? <span className="block text-[11px] text-cyan-300">{formatFixtureDateForDisplay(fixtureEditor.date)}</span> : null}
               </label>
               <label className="space-y-1 text-xs font-semibold text-slate-300">
                 Saat
@@ -4406,7 +4409,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       events: [],
       elapsedMinutes: 0,
       week: fixture.week,
-      matchDate: fixture.date,
+      matchDate: normalizeFixtureDate(fixture.date),
       matchTime: fixture.time,
       venue: fixture.venue,
     }))
@@ -4428,7 +4431,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     const fixtureRows = generated.map((fixture) => ({
       id: fixture.id,
       tournament_id: fixtureForm.tournamentId,
-      fixture_date: fixture.date.includes(' (') ? fixture.date.split(' (')[0] : fixture.date,
+      fixture_date: normalizeFixtureDate(fixture.date),
       fixture_time: fixture.time,
       venue: fixture.venue,
       status: 'Planlandı' as const,
@@ -4445,7 +4448,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       status: match.status,
       elapsed_minutes: Number(match.elapsedMinutes ?? 0),
       week: match.week ?? null,
-      match_date: match.matchDate ?? null,
+      match_date: match.matchDate ? normalizeFixtureDate(match.matchDate) : null,
       match_time: match.matchTime ?? null,
       venue: match.venue ?? null,
       mvp_player_id: null,
