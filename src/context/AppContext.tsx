@@ -941,6 +941,9 @@ interface AppContextType {
   refreshData: () => Promise<void>
   updateUserPermissions: (userId: string, permissions: PermissionSet) => Promise<void>
   updateMatchState: (match: Match) => Promise<void>
+  createFixture: (fixture: Fixture) => Promise<void>
+  updateFixture: (fixture: Fixture) => Promise<void>
+  deleteFixture: (fixtureId: string) => Promise<void>
   addPlayerToTeam: (teamId: string, player: PlayerInput) => Promise<void>
   removePlayerFromTeam: (playerId: string) => Promise<void>
   sendMessage: (payload: { senderId: string; senderName: string; title: string; body: string }) => Promise<void>
@@ -1894,6 +1897,118 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const createFixture = async (fixture: Fixture) => {
+    const fixtureRow = {
+      id: fixture.id,
+      tournament_id: fixture.tournamentId,
+      home_team_id: fixture.homeTeamId,
+      away_team_id: fixture.awayTeamId,
+      fixture_date: fixture.date,
+      fixture_time: fixture.time,
+      venue: fixture.venue,
+      status: fixture.status,
+      home_score: fixture.homeScore,
+      away_score: fixture.awayScore,
+      notes: fixture.notes ?? null,
+      week: fixture.week ?? null,
+    }
+
+    const { error: fixtureError } = await supabase.from('fixtures').insert(fixtureRow)
+    if (fixtureError) throw fixtureError
+
+    const { error: matchError } = await supabase.from('matches').insert({
+      id: crypto.randomUUID(),
+      tournament_id: fixture.tournamentId,
+      fixture_id: fixture.id,
+      home_team_id: fixture.homeTeamId,
+      away_team_id: fixture.awayTeamId,
+      home_score: fixture.homeScore,
+      away_score: fixture.awayScore,
+      status: 'Planlandı',
+      elapsed_minutes: 0,
+      week: fixture.week ?? null,
+      match_date: fixture.date,
+      match_time: fixture.time,
+      venue: fixture.venue,
+      mvp_player_id: null,
+    })
+
+    if (matchError) {
+      const { error: rollbackError } = await supabase.from('fixtures').delete().eq('id', fixture.id)
+      if (rollbackError) {
+        console.error('Fixture rollback failed after match creation error:', rollbackError)
+      }
+      throw matchError
+    }
+
+    await refreshData()
+  }
+
+  const updateFixture = async (fixture: Fixture) => {
+    const { error: fixtureError } = await supabase.from('fixtures').update({
+      tournament_id: fixture.tournamentId,
+      home_team_id: fixture.homeTeamId,
+      away_team_id: fixture.awayTeamId,
+      fixture_date: fixture.date,
+      fixture_time: fixture.time,
+      venue: fixture.venue,
+      week: fixture.week ?? null,
+    }).eq('id', fixture.id)
+    if (fixtureError) throw fixtureError
+
+    const match = appState.matches.find((item) => item.fixtureId === fixture.id)
+    if (match) {
+      const { error: matchError } = await supabase.from('matches').update({
+        tournament_id: fixture.tournamentId,
+        home_team_id: fixture.homeTeamId,
+        away_team_id: fixture.awayTeamId,
+        week: fixture.week ?? null,
+        match_date: fixture.date,
+        match_time: fixture.time,
+        venue: fixture.venue,
+      }).eq('id', match.id)
+      if (matchError) throw matchError
+    } else {
+      const { error: matchError } = await supabase.from('matches').insert({
+        id: crypto.randomUUID(),
+        tournament_id: fixture.tournamentId,
+        fixture_id: fixture.id,
+        home_team_id: fixture.homeTeamId,
+        away_team_id: fixture.awayTeamId,
+        home_score: fixture.homeScore,
+        away_score: fixture.awayScore,
+        status: 'Planlandı',
+        elapsed_minutes: 0,
+        week: fixture.week ?? null,
+        match_date: fixture.date,
+        match_time: fixture.time,
+        venue: fixture.venue,
+        mvp_player_id: null,
+      })
+      if (matchError) throw matchError
+    }
+
+    await refreshData()
+  }
+
+  const deleteFixture = async (fixtureId: string) => {
+    const matchingMatches = appState.matches.filter((match) => match.fixtureId === fixtureId)
+    for (const match of matchingMatches) {
+      const { error: eventsError } = await supabase.from('match_events').delete().eq('match_id', match.id)
+      if (eventsError) throw eventsError
+    }
+
+    if (matchingMatches.length > 0) {
+      const { error: matchesError } = await supabase.from('matches').delete().in('id', matchingMatches.map((match) => match.id))
+      if (matchesError) throw matchesError
+    }
+
+    const { error: fixtureError } = await supabase.from('fixtures').delete().eq('id', fixtureId)
+    if (fixtureError) throw fixtureError
+
+    await refreshData()
+  }
+
   const addPlayerToTeam = async (teamId: string, player: PlayerInput) => {
     const resolvedTournamentId = player.tournamentId ?? (await getActiveTournamentIdForTeam(teamId))
 
@@ -2293,6 +2408,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       refreshData,
       updateUserPermissions,
       updateMatchState,
+      createFixture,
+      updateFixture,
+      deleteFixture,
       addPlayerToTeam,
       removePlayerFromTeam,
       sendMessage,

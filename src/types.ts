@@ -158,7 +158,7 @@ export interface Match {
   away_team?: MatchTeamNameRecord
   homeScore: number
   awayScore: number
-  status: 'Başlatıldı' | 'Durduruldu' | 'Bitti'
+  status: 'Planlandı' | 'Başlatıldı' | 'Durduruldu' | 'Bitti'
   events: MatchEvent[]
   elapsedMinutes?: number
   mvpPlayerId?: string

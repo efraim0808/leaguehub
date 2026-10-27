@@ -491,7 +491,7 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<HomePage currentUser={currentUser} safeTournaments={safeTournaments} sponsors={sponsors} />} />
           <Route path="/standings" element={<StandingsPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} />} />
-          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} />} />
+          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={activeUserRole === 'Super Admin'} />} />
           <Route path="/stats" element={<Navigate to="/standings" replace />} />
           <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} canManageMatchControls={canAccessLiveMatchControls} />} />
           <Route path="/transfer-market" element={<TransferMarketPage currentUser={currentUser} />} />
@@ -1732,12 +1732,18 @@ function FixtureWeekCarousel({
   onSelectWeek,
   safeTeams,
   onSelectFixture,
+  canManageFixtures = false,
+  onEditFixture,
+  onDeleteFixture,
 }: {
   fixtureWeeks: { key: string; label: string; entries: Fixture[] }[]
   selectedWeek: string
   onSelectWeek: (nextWeek: string) => void
   safeTeams: Team[]
   onSelectFixture?: (fixtureId: string) => void
+  canManageFixtures?: boolean
+  onEditFixture?: (fixtureId: string) => void
+  onDeleteFixture?: (fixtureId: string) => void
 }) {
   if (!fixtureWeeks.length) {
     return (
@@ -1809,7 +1815,7 @@ function FixtureWeekCarousel({
             const homeName = home?.name || (fixture as any).mappedHome || (fixture as any).home_team_name || (fixture as any).homeTeam || 'Takım'
             const awayName = away?.name || (fixture as any).mappedAway || (fixture as any).away_team_name || (fixture as any).awayTeam || 'Takım'
             const isLive = fixture.status === 'Devam Ediyor'
-            const timeLabel = isLive ? 'MS' : fixture.time || 'TBD'
+            const timeLabel = fixture.time || 'Saat belirtilmedi'
 
             return (
               <div
@@ -1817,9 +1823,39 @@ function FixtureWeekCarousel({
                 onClick={() => onSelectFixture?.(fixture.id)}
                 className={`rounded-[22px] border border-slate-800 bg-slate-950/80 p-3 shadow-[0_0_20px_rgba(15,23,42,0.25)] ${onSelectFixture ? 'cursor-pointer' : ''} ${isLive ? 'border-red-500/40 bg-red-500/5' : ''}`}
               >
-                <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-[0.14em] text-slate-400">
-                  <span>{formatFixtureDateTitle(fixture.date)}</span>
-                  <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-1 text-cyan-300">{timeLabel}</span>
+                <div className="mb-2 flex items-center justify-between gap-2 text-[10px] uppercase tracking-[0.14em] text-slate-400">
+                  <span className="font-bold text-slate-200">{fixture.date || 'Tarih belirtilmedi'} • {timeLabel}</span>
+                  <div className="flex items-center gap-2">
+                    {isLive ? <span className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-1 text-red-300">Canlı</span> : null}
+                    {canManageFixtures ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onEditFixture?.(fixture.id)
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-200 transition hover:bg-cyan-500/20"
+                          aria-label="Maçı düzenle"
+                          title="Maçı düzenle"
+                        >
+                          <PencilLine size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            onDeleteFixture?.(fixture.id)
+                          }}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 transition hover:bg-red-500/20"
+                          aria-label="Maçı sil"
+                          title="Maçı sil"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3">
@@ -2585,20 +2621,6 @@ const getFixtureWeekStart = (dateValue: string) => {
   return weekStart
 }
 
-const formatFixtureDateTitle = (dateValue: string) => {
-  const date = new Date(`${dateValue}T12:00:00`)
-  if (Number.isNaN(date.getTime())) return dateValue
-
-  const dayName = new Intl.DateTimeFormat('tr-TR', { weekday: 'long' }).format(date)
-  const dateName = new Intl.DateTimeFormat('tr-TR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  }).format(date)
-
-  return `${dateName} - ${dayName.charAt(0).toUpperCase()}${dayName.slice(1)}`
-}
-
 const getWeekRank = (value: string) => {
   const match = value.match(/(\d+)/)
   return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER
@@ -2645,11 +2667,13 @@ export const sortMatchesChronologically = (items: Match[]) => {
   return [...items].sort((left, right) => getMatchTimestamp(left) - getMatchTimestamp(right))
 }
 
-function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatchControls = false }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches?: Match[]; canManageMatchControls?: boolean }) {
-  const { appState, updateMatchState } = useAppContext()
+function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatchControls = false, canManageFixtures = false }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches?: Match[]; canManageMatchControls?: boolean; canManageFixtures?: boolean }) {
+  const { appState, updateMatchState, createFixture, updateFixture, deleteFixture } = useAppContext()
   const [selectedWeek, setSelectedWeek] = useState('')
   const [directMatches, setDirectMatches] = useState<Match[]>([])
   const [selectedFixtureDetailId, setSelectedFixtureDetailId] = useState<string | null>(null)
+  const [fixtureEditor, setFixtureEditor] = useState<{ id?: string; week: string; date: string; time: string; homeTeamId: string; awayTeamId: string } | null>(null)
+  const [fixtureSaving, setFixtureSaving] = useState(false)
   const [eventDraft, setEventDraft] = useState<{ teamId: string; playerId: string; minute: number; type: MatchEvent['type']; description: string }>({
     teamId: '',
     playerId: '',
@@ -2685,6 +2709,11 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
   }, [directMatches, matches, safeTeams, tournament])
 
   const fixtureWeeks = useMemo(() => buildFixtureWeekGroups(fixtureList), [fixtureList])
+  const fixtureTeams = useMemo(() => {
+    const tournamentTeamIds = new Set(tournament?.teams ?? [])
+    const tournamentTeams = safeTeams.filter((team) => tournamentTeamIds.has(team.id))
+    return tournamentTeams.length > 0 ? tournamentTeams : safeTeams
+  }, [safeTeams, tournament])
 
   useEffect(() => {
     if (fixtureWeeks.length > 0) {
@@ -2769,6 +2798,84 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     await updateMatchState(nextMatch)
   }
 
+  const openNewFixtureEditor = () => {
+    const firstTeam = fixtureTeams[0]?.id ?? ''
+    setFixtureEditor({
+      week: selectedWeek || '1. Hafta',
+      date: '',
+      time: '20:30',
+      homeTeamId: firstTeam,
+      awayTeamId: fixtureTeams.find((team) => team.id !== firstTeam)?.id ?? '',
+    })
+  }
+
+  const openFixtureEditor = (fixtureId: string) => {
+    const fixture = fixtureList.find((item) => item.id === fixtureId)
+    if (!fixture) return
+    setFixtureEditor({
+      id: fixture.id,
+      week: fixture.week ?? selectedWeek,
+      date: fixture.date,
+      time: fixture.time,
+      homeTeamId: fixture.homeTeamId,
+      awayTeamId: fixture.awayTeamId,
+    })
+  }
+
+  const saveFixtureEditor = async () => {
+    if (!fixtureEditor || !tournament) return
+    if (!fixtureEditor.date || !fixtureEditor.time || !fixtureEditor.homeTeamId || !fixtureEditor.awayTeamId || !fixtureEditor.week.trim()) {
+      window.alert('Hafta, tarih, saat, ev sahibi ve deplasman takımı alanları zorunludur.')
+      return
+    }
+    if (fixtureEditor.homeTeamId === fixtureEditor.awayTeamId) {
+      window.alert('Ev sahibi ve deplasman takımları farklı olmalıdır.')
+      return
+    }
+
+    const existingFixture = fixtureEditor.id ? fixtureList.find((fixture) => fixture.id === fixtureEditor.id) : undefined
+    const fixture: Fixture = {
+      id: fixtureEditor.id ?? crypto.randomUUID(),
+      tournamentId: tournament.id,
+      homeTeamId: fixtureEditor.homeTeamId,
+      awayTeamId: fixtureEditor.awayTeamId,
+      date: fixtureEditor.date,
+      time: fixtureEditor.time,
+      venue: existingFixture?.venue ?? '',
+      status: existingFixture?.status ?? 'Planlandı',
+      homeScore: existingFixture?.homeScore ?? 0,
+      awayScore: existingFixture?.awayScore ?? 0,
+      week: fixtureEditor.week.trim(),
+    }
+
+    setFixtureSaving(true)
+    try {
+      if (fixtureEditor.id) {
+        await updateFixture(fixture)
+      } else {
+        await createFixture(fixture)
+      }
+      setSelectedWeek(fixture.week ?? '')
+      setFixtureEditor(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Maç kaydedilemedi: ${message}`)
+    } finally {
+      setFixtureSaving(false)
+    }
+  }
+
+  const handleFixtureDelete = async (fixtureId: string) => {
+    if (!window.confirm('Bu maçı fikstürden silmek istediğinizden emin misiniz?')) return
+    try {
+      await deleteFixture(fixtureId)
+      setSelectedFixtureDetailId((current) => current === fixtureId ? null : current)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Maç silinemedi: ${message}`)
+    }
+  }
+
   return (
     <div className="space-y-5 pb-8">
       <div className="rounded-[28px] border border-slate-800 bg-slate-900 p-4">
@@ -2777,7 +2884,20 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
             <div className="text-xs uppercase tracking-[0.2em] text-cyan-300">Fikstür</div>
             <h2 className="mt-1 text-2xl font-black text-white">{tournament?.name ?? 'Turnuva Maç Takvimi'}</h2>
           </div>
-          <CalendarDays className="text-cyan-300" size={22} />
+          <div className="flex items-center gap-2">
+            {canManageFixtures ? (
+              <button
+                type="button"
+                onClick={openNewFixtureEditor}
+                disabled={!tournament || fixtureTeams.length < 2}
+                className="inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-3 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Plus size={16} />
+                Maç Ekle
+              </button>
+            ) : null}
+            <CalendarDays className="text-cyan-300" size={22} />
+          </div>
         </div>
       </div>
 
@@ -2788,8 +2908,59 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
           onSelectWeek={setSelectedWeek}
           safeTeams={safeTeams}
           onSelectFixture={setSelectedFixtureDetailId}
+          canManageFixtures={canManageFixtures}
+          onEditFixture={openFixtureEditor}
+          onDeleteFixture={(fixtureId) => void handleFixtureDelete(fixtureId)}
         />
       </div>
+
+      {fixtureEditor ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" onClick={() => !fixtureSaving && setFixtureEditor(null)}>
+          <div className="w-full max-w-xl rounded-[28px] border border-slate-700 bg-slate-900 p-5 shadow-[0_30px_80px_rgba(15,23,42,0.75)]" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.2em] text-cyan-300">Süper Admin</div>
+                <h3 className="mt-1 text-xl font-black text-white">{fixtureEditor.id ? 'Maçı Düzenle' : 'Yeni Maç Ekle'}</h3>
+              </div>
+              <button type="button" onClick={() => setFixtureEditor(null)} disabled={fixtureSaving} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-200 disabled:opacity-50">Kapat</button>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs font-semibold text-slate-300">
+                Hafta
+                <input required value={fixtureEditor.week} onChange={(event) => setFixtureEditor((current) => current ? { ...current, week: event.target.value } : current)} placeholder="Örn. 1. Hafta" className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-300">
+                Tarih
+                <input required type="date" value={fixtureEditor.date} onChange={(event) => setFixtureEditor((current) => current ? { ...current, date: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-300">
+                Saat
+                <input required type="time" value={fixtureEditor.time} onChange={(event) => setFixtureEditor((current) => current ? { ...current, time: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white" />
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-300">
+                Ev sahibi
+                <select required value={fixtureEditor.homeTeamId} onChange={(event) => setFixtureEditor((current) => current ? { ...current, homeTeamId: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white">
+                  <option value="">Takım seçin</option>
+                  {fixtureTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1 text-xs font-semibold text-slate-300 sm:col-span-2">
+                Deplasman
+                <select required value={fixtureEditor.awayTeamId} onChange={(event) => setFixtureEditor((current) => current ? { ...current, awayTeamId: event.target.value } : current)} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white">
+                  <option value="">Takım seçin</option>
+                  {fixtureTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button type="button" onClick={() => void saveFixtureEditor()} disabled={fixtureSaving} className="flex-1 rounded-xl bg-cyan-500 px-3 py-2.5 text-sm font-bold text-slate-950 disabled:opacity-50">
+                {fixtureSaving ? 'Kaydediliyor...' : 'Kaydet'}
+              </button>
+              <button type="button" onClick={() => setFixtureEditor(null)} disabled={fixtureSaving} className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm font-bold text-slate-200 disabled:opacity-50">İptal</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedFixtureMatch ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm" onClick={() => setSelectedFixtureDetailId(null)}>
