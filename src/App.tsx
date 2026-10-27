@@ -3817,6 +3817,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   const [deletingAnnouncementIds, setDeletingAnnouncementIds] = useState<Record<string, boolean>>({})
   const [liveBroadcastForm, setLiveBroadcastForm] = useState({ youtubeUrl: '', isLive: false })
   const [fixtureCustomTime, setFixtureCustomTime] = useState('')
+  const [isClearingFixtures, setIsClearingFixtures] = useState(false)
   const [isCreatingTournament, setIsCreatingTournament] = useState(false)
   const [tournamentCreateFeedback, setTournamentCreateFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [globalToast, setGlobalToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
@@ -4481,28 +4482,37 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleClearTournamentFixtures = async () => {
-    if (!fixtureForm.tournamentId) return
+    if (!fixtureForm.tournamentId || isClearingFixtures) return
 
     const selectedTournament = safeTournaments.find((item) => item.id === fixtureForm.tournamentId)
     if (!selectedTournament) return
 
-    const confirmed = window.confirm(`${selectedTournament.name} turnuvasındaki tüm fikstürü silmek istediğinize emin misiniz?`)
+    const confirmed = window.confirm('Bu turnuvanın tüm fikstürü silinecek, emin misiniz?')
     if (!confirmed) return
 
-    const { error } = await supabase.from('fixtures').delete().eq('tournament_id', fixtureForm.tournamentId)
-    if (error) {
-      console.error('Fixture cleanup failed:', error)
-      window.alert('Fikstür silinemedi: ' + error.message)
-      return
-    }
+    setIsClearingFixtures(true)
+    try {
+      const { error: matchesError } = await supabase
+        .from('matches')
+        .delete()
+        .eq('tournament_id', fixtureForm.tournamentId)
+      if (matchesError) throw matchesError
 
-    await updateAppState({
-      ...appState,
-      tournaments: appState.tournaments.map((tournament) =>
-        tournament.id === fixtureForm.tournamentId ? { ...tournament, fixtures: [] } : tournament,
-      ),
-    })
-    setAdminModal(null)
+      const { error: fixturesError } = await supabase
+        .from('fixtures')
+        .delete()
+        .eq('tournament_id', fixtureForm.tournamentId)
+      if (fixturesError) throw fixturesError
+
+      await refreshData()
+      setAdminModal(null)
+    } catch (error) {
+      console.error('Tournament fixture cleanup failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Fikstür silinemedi: ${message}`)
+    } finally {
+      setIsClearingFixtures(false)
+    }
   }
 
   const adminModules = [
@@ -5993,9 +6003,10 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                     <button
                       type="button"
                       onClick={() => void handleClearTournamentFixtures()}
-                      className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 font-bold text-red-200"
+                      disabled={isClearingFixtures || !fixtureForm.tournamentId}
+                      className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 font-bold text-red-200 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Fikstürü Sil / Tümünü Temizle
+                      {isClearingFixtures ? 'Fikstür Siliniyor...' : 'Fikstürü Sil / Tümünü Temizle'}
                     </button>
                   </div>
                 </div>
