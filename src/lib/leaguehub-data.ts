@@ -1167,6 +1167,30 @@ export const formatFixtureDateForDisplay = (dateValue: string): string => {
 }
 
 const DAY_ORDER = [...FULL_WEEK_DAYS]
+const DAY_INDEX_TO_NAME: Record<number, (typeof FULL_WEEK_DAYS)[number]> = {
+  0: 'Pazar',
+  1: 'Pazartesi',
+  2: 'Salı',
+  3: 'Çarşamba',
+  4: 'Perşembe',
+  5: 'Cuma',
+  6: 'Cumartesi',
+}
+
+const normalizeSelectedFixtureDay = (day: string): (typeof FULL_WEEK_DAYS)[number] | null => {
+  const trimmedDay = day.trim()
+  if (!trimmedDay) return null
+
+  const numericDay = Number(trimmedDay)
+  if (/^\d$/.test(trimmedDay) && DAY_INDEX_TO_NAME[numericDay]) {
+    return DAY_INDEX_TO_NAME[numericDay]
+  }
+
+  const normalizedDay = trimmedDay.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return FULL_WEEK_DAYS.find((candidate) =>
+    candidate.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '') === normalizedDay,
+  ) ?? null
+}
 
 const generateRoundRobinRounds = (teamIds: string[]): Array<Array<[string, string]>> => {
   const rotation = [...teamIds]
@@ -1202,54 +1226,49 @@ export const generateAutoFixtures = (
   const uniqueTeamIds = Array.from(new Set(teamIds.filter((teamId) => uuidPattern.test(teamId.trim()))))
   if (uniqueTeamIds.length < 2) return []
 
-  const dayPool = selectedDays.length ? [...selectedDays] : [...FULL_WEEK_DAYS]
-  const timePool = selectedTimes.length ? [...selectedTimes] : [...DEFAULT_FIXTURE_TIMES]
+  const dayPool = selectedDays.length
+    ? Array.from(new Set(selectedDays.map(normalizeSelectedFixtureDay).filter((day): day is (typeof FULL_WEEK_DAYS)[number] => day !== null)))
+    : [...FULL_WEEK_DAYS]
+  const timePool = Array.from(new Set(selectedTimes.length ? [...selectedTimes] : [...DEFAULT_FIXTURE_TIMES]))
+  if (dayPool.length === 0 || timePool.length === 0) return []
+
   const rounds = generateRoundRobinRounds(uniqueTeamIds)
-  const slotPool = dayPool.flatMap((dayName) => timePool.map((time) => ({ dayName, time })))
 
   const fixtures: Fixture[] = []
-  let fixtureIndex = 0
-  const baseDate = startDate ? new Date(startDate) : new Date('2026-09-01T00:00:00.000Z')
+  const normalizedStartDate = startDate ? normalizeFixtureDate(startDate) : '2026-09-01'
+  const parsedStartDate = new Date(`${normalizedStartDate}T00:00:00.000Z`)
+  const baseDate = Number.isNaN(parsedStartDate.getTime()) ? new Date('2026-09-01T00:00:00.000Z') : parsedStartDate
 
   rounds.forEach((roundPairings, roundIndex) => {
-    const usedSlots = new Set<string>()
     const teamDayMap = new Map<string, Set<string>>()
     const roundDayUsage = new Map<string, number>()
-    const roundTimeUsage = new Map<string, number>()
+    const roundTime = timePool[roundIndex % timePool.length]
 
     roundPairings.forEach((pair) => {
       const [homeTeamId, awayTeamId] = pair
       const homeDayEntries = teamDayMap.get(homeTeamId) ?? new Set<string>()
       const awayDayEntries = teamDayMap.get(awayTeamId) ?? new Set<string>()
 
-      const selectedSlot = slotPool
-        .filter(({ dayName, time }) => {
-          const isHomeAvailable = !homeDayEntries.has(dayName)
-          const isAwayAvailable = !awayDayEntries.has(dayName)
-          const isTimeFree = !usedSlots.has(`${dayName}:${time}`)
-          return isHomeAvailable && isAwayAvailable && isTimeFree
-        })
-        .sort((left, right) => {
-          const leftDayCount = roundDayUsage.get(left.dayName) ?? 0
-          const rightDayCount = roundDayUsage.get(right.dayName) ?? 0
-          const leftTimeCount = roundTimeUsage.get(left.time) ?? 0
-          const rightTimeCount = roundTimeUsage.get(right.time) ?? 0
+      const selectedDay = dayPool
+        .filter((dayName) => !homeDayEntries.has(dayName) && !awayDayEntries.has(dayName))
+        .sort((left, right) =>
+          (roundDayUsage.get(left) ?? 0) - (roundDayUsage.get(right) ?? 0),
+        )[0]
 
-          if (leftDayCount !== rightDayCount) return leftDayCount - rightDayCount
-          if (leftTimeCount !== rightTimeCount) return leftTimeCount - rightTimeCount
-          return timePool.indexOf(left.time) - timePool.indexOf(right.time)
-        })[0]
-
-      if (!selectedSlot) {
+      if (!selectedDay) {
         return
       }
 
-      const { dayName, time } = selectedSlot
+      const dayName = selectedDay
+      const time = roundTime
       const weekStart = new Date(baseDate)
-      weekStart.setDate(baseDate.getDate() + roundIndex * 7)
-      const dayOffset = DAY_ORDER.indexOf(dayName as (typeof FULL_WEEK_DAYS)[number])
+      weekStart.setUTCDate(baseDate.getUTCDate() + roundIndex * 7)
+      const dayOffset = DAY_ORDER.indexOf(dayName)
+      const targetDayIndex = (dayOffset + 1) % 7
+      const baseDayIndex = weekStart.getUTCDay()
+      const daysUntilTarget = (targetDayIndex - baseDayIndex + 7) % 7
       const date = new Date(weekStart)
-      date.setDate(weekStart.getDate() + (dayOffset >= 0 ? dayOffset : 0))
+      date.setUTCDate(weekStart.getUTCDate() + daysUntilTarget)
 
       const weekLabel = `${roundIndex + 1}. Hafta`
 
@@ -1267,14 +1286,11 @@ export const generateAutoFixtures = (
         week: weekLabel,
       })
 
-      usedSlots.add(`${dayName}:${time}`)
       roundDayUsage.set(dayName, (roundDayUsage.get(dayName) ?? 0) + 1)
-      roundTimeUsage.set(time, (roundTimeUsage.get(time) ?? 0) + 1)
       homeDayEntries.add(dayName)
       awayDayEntries.add(dayName)
       teamDayMap.set(homeTeamId, homeDayEntries)
       teamDayMap.set(awayTeamId, awayDayEntries)
-      fixtureIndex += 1
     })
   })
 
