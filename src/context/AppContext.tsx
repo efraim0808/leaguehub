@@ -328,14 +328,10 @@ export const sanitizeFixturePayload = (payload: Record<string, unknown>) => {
   const allowedKeys = new Set([
     'id',
     'tournament_id',
-    'home_team_id',
-    'away_team_id',
     'fixture_date',
     'fixture_time',
     'venue',
     'status',
-    'home_score',
-    'away_score',
     'notes',
     'created_at',
   ])
@@ -1603,14 +1599,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       tournament.fixtures.map((fixture) => sanitizeFixturePayload({
         id: fixture.id,
         tournament_id: tournament.id,
-        home_team_id: fixture.homeTeamId,
-        away_team_id: fixture.awayTeamId,
         fixture_date: normalizeFixtureDate(fixture.date),
         fixture_time: fixture.time,
         venue: fixture.venue,
         status: fixture.status,
-        home_score: fixture.homeScore,
-        away_score: fixture.awayScore,
         notes: fixture.notes ?? null,
         created_at: new Date().toISOString(),
       })),
@@ -1807,8 +1799,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { error: fixtureError } = await supabase.from('fixtures').update({
-      home_score: match.homeScore,
-      away_score: match.awayScore,
       status: fixtureStatus,
       notes: `Güncel maç durumu: ${match.status}`,
     }).eq('id', match.fixtureId)
@@ -1902,14 +1892,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const fixtureRow = sanitizeFixturePayload({
       id: fixture.id,
       tournament_id: fixture.tournamentId,
-      home_team_id: fixture.homeTeamId,
-      away_team_id: fixture.awayTeamId,
       fixture_date: normalizeFixtureDate(fixture.date),
       fixture_time: fixture.time,
       venue: fixture.venue,
       status: fixture.status,
-      home_score: fixture.homeScore,
-      away_score: fixture.awayScore,
       notes: fixture.notes ?? null,
     })
 
@@ -1947,8 +1933,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateFixture = async (fixture: Fixture) => {
     const { error: fixtureError } = await supabase.from('fixtures').update(sanitizeFixturePayload({
       tournament_id: fixture.tournamentId,
-      home_team_id: fixture.homeTeamId,
-      away_team_id: fixture.awayTeamId,
       fixture_date: normalizeFixtureDate(fixture.date),
       fixture_time: fixture.time,
       venue: fixture.venue,
@@ -1961,6 +1945,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tournament_id: fixture.tournamentId,
         home_team_id: fixture.homeTeamId,
         away_team_id: fixture.awayTeamId,
+        home_score: fixture.homeScore,
+        away_score: fixture.awayScore,
         week: fixture.week ?? null,
         match_date: normalizeFixtureDate(fixture.date),
         match_time: fixture.time,

@@ -750,14 +750,16 @@ describe('LeagueHub – full integration scenarios', () => {
 
     expect(fixturePayload).toMatchObject({
       tournament_id: 'tourney-1',
-      home_team_id: 'team-1',
-      away_team_id: 'team-2',
       fixture_date: '2026-09-02',
       venue: 'Merkez Stadyum',
       status: 'Planlandı',
     })
     expect(fixturePayload).not.toHaveProperty('legacy_field')
     expect(fixturePayload).not.toHaveProperty('week')
+    expect(fixturePayload).not.toHaveProperty('home_team_id')
+    expect(fixturePayload).not.toHaveProperty('away_team_id')
+    expect(fixturePayload).not.toHaveProperty('home_score')
+    expect(fixturePayload).not.toHaveProperty('away_score')
   })
 
   it('drops legacy team columns from registration payloads while keeping active DB fields', () => {
