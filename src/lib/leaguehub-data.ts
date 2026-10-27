@@ -1238,13 +1238,46 @@ export const generateAutoFixtures = (
   const normalizedStartDate = startDate ? normalizeFixtureDate(startDate) : '2026-09-01'
   const parsedStartDate = new Date(`${normalizedStartDate}T00:00:00.000Z`)
   const baseDate = Number.isNaN(parsedStartDate.getTime()) ? new Date('2026-09-01T00:00:00.000Z') : parsedStartDate
+  const teamTimeUsage = new Map<string, Map<string, number>>()
 
   rounds.forEach((roundPairings, roundIndex) => {
     const teamDayMap = new Map<string, Set<string>>()
     const roundDayUsage = new Map<string, number>()
-    const roundTime = timePool[roundIndex % timePool.length]
 
-    roundPairings.forEach((pair) => {
+    const remainingPairings = [...roundPairings]
+    for (let pairingIndex = 0; pairingIndex < roundPairings.length; pairingIndex += 1) {
+      const time = timePool[(roundIndex + pairingIndex) % timePool.length]
+      const selectedPairingIndex = remainingPairings
+        .map((pair, index) => {
+          const [homeTeamId, awayTeamId] = pair
+          const getProjectedBalance = (teamId: string) => {
+            const usage = teamTimeUsage.get(teamId)
+            const counts = timePool.map((candidateTime) =>
+              (usage?.get(candidateTime) ?? 0) + (candidateTime === time ? 1 : 0),
+            )
+            return {
+              spread: Math.max(...counts) - Math.min(...counts),
+              squaredTotal: counts.reduce((total, count) => total + count * count, 0),
+            }
+          }
+          const homeBalance = getProjectedBalance(homeTeamId)
+          const awayBalance = getProjectedBalance(awayTeamId)
+          return {
+            index,
+            spread: homeBalance.spread + awayBalance.spread,
+            squaredTotal: homeBalance.squaredTotal + awayBalance.squaredTotal,
+            usage: (teamTimeUsage.get(homeTeamId)?.get(time) ?? 0) + (teamTimeUsage.get(awayTeamId)?.get(time) ?? 0),
+          }
+        })
+        .sort((left, right) =>
+          left.spread - right.spread
+          || left.squaredTotal - right.squaredTotal
+          || left.usage - right.usage
+          || left.index - right.index,
+        )[0]?.index
+      if (selectedPairingIndex === undefined) continue
+
+      const [pair] = remainingPairings.splice(selectedPairingIndex, 1)
       const [homeTeamId, awayTeamId] = pair
       const homeDayEntries = teamDayMap.get(homeTeamId) ?? new Set<string>()
       const awayDayEntries = teamDayMap.get(awayTeamId) ?? new Set<string>()
@@ -1256,11 +1289,9 @@ export const generateAutoFixtures = (
         )[0]
 
       if (!selectedDay) {
-        return
+        continue
       }
-
       const dayName = selectedDay
-      const time = roundTime
       const weekStart = new Date(baseDate)
       weekStart.setUTCDate(baseDate.getUTCDate() + roundIndex * 7)
       const dayOffset = DAY_ORDER.indexOf(dayName)
@@ -1287,11 +1318,16 @@ export const generateAutoFixtures = (
       })
 
       roundDayUsage.set(dayName, (roundDayUsage.get(dayName) ?? 0) + 1)
+      for (const teamId of [homeTeamId, awayTeamId]) {
+        const usage = teamTimeUsage.get(teamId) ?? new Map<string, number>()
+        usage.set(time, (usage.get(time) ?? 0) + 1)
+        teamTimeUsage.set(teamId, usage)
+      }
       homeDayEntries.add(dayName)
       awayDayEntries.add(dayName)
       teamDayMap.set(homeTeamId, homeDayEntries)
       teamDayMap.set(awayTeamId, awayDayEntries)
-    })
+    }
   })
 
   return fixtures

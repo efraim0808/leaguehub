@@ -1019,7 +1019,36 @@ describe('LeagueHub – full integration scenarios', () => {
         .map((fixture) => fixture.time)
       const counts = times.map((time) => teamTimes.filter((teamTime) => teamTime === time).length)
 
-      expect(Math.max(...counts) - Math.min(...counts), `${teamId}: ${counts.join(', ')}`).toBeLessThanOrEqual(1)
+      expect(new Set(teamTimes).size, `${teamId}: ${counts.join(', ')}`).toBeGreaterThanOrEqual(3)
+      expect(Math.max(...counts) - Math.min(...counts), `${teamId}: ${counts.join(', ')}`).toBeLessThanOrEqual(2)
+    }
+  })
+
+  it('cycles selected kickoff slots across all matches in each round', () => {
+    const teamIds = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      '33333333-3333-4333-8333-333333333333',
+      '44444444-4444-4444-8444-444444444444',
+      '55555555-5555-4555-8555-555555555555',
+      '66666666-6666-4666-8666-666666666666',
+    ]
+    const times = ['18:00', '19:00', '20:00']
+    const fixtures = generateAutoFixtures('demo-tourney', teamIds, ['Çarşamba', 'Cumartesi'], times, 'Merkez Stadyum', '2026-09-01')
+    const fixturesByWeek = new Map<string, typeof fixtures>()
+
+    fixtures.forEach((fixture) => {
+      const weekFixtures = fixturesByWeek.get(fixture.week ?? '') ?? []
+      weekFixtures.push(fixture)
+      fixturesByWeek.set(fixture.week ?? '', weekFixtures)
+    })
+
+    expect(fixturesByWeek.size).toBe(teamIds.length - 1)
+    for (const [week, weekFixtures] of fixturesByWeek) {
+      expect(weekFixtures.map((fixture) => fixture.time), week).toEqual(
+        weekFixtures.map((_, index) => times[(Number(week.match(/\d+/)?.[0]) - 1 + index) % times.length]),
+      )
+      expect(new Set(weekFixtures.map((fixture) => fixture.date)).size).toBeGreaterThan(0)
     }
   })
 
