@@ -737,13 +737,14 @@ describe('LeagueHub – full integration scenarios', () => {
       tournament_id: 'tourney-1',
       home_team_id: 'team-1',
       away_team_id: 'team-2',
-      fixture_date: '2026-09-02',
       fixture_time: '19:00',
       venue: 'Merkez Stadyum',
       status: 'Planlandı',
       home_score: 0,
       away_score: 0,
       notes: 'Açılış maçı',
+      week: '1. Hafta',
+      fixture_date: '2026-09-02 (ÇARŞAMBA)',
       legacy_field: 'bad',
     })
 
@@ -756,6 +757,7 @@ describe('LeagueHub – full integration scenarios', () => {
       status: 'Planlandı',
     })
     expect(fixturePayload).not.toHaveProperty('legacy_field')
+    expect(fixturePayload).not.toHaveProperty('week')
   })
 
   it('drops legacy team columns from registration payloads while keeping active DB fields', () => {

@@ -2861,7 +2861,12 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
       setSelectedWeek(fixture.week ?? '')
       setFixtureEditor(null)
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      console.error('Manual fixture save failed:', error)
+      const message = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error && typeof error.message === 'string'
+          ? error.message
+          : String(error)
       window.alert(`Maç kaydedilemedi: ${message}`)
     } finally {
       setFixtureSaving(false)
