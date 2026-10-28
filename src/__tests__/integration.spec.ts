@@ -886,6 +886,89 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(fixtures.every((fixture) => /^\d+\. Hafta$/.test(fixture.week ?? ''))).toBe(true)
   })
 
+  it('creates a complete single round-robin with balanced byes for odd team counts', () => {
+    for (const teamCount of [3, 5, 7, 9]) {
+      const teamIds = Array.from({ length: teamCount }, (_, index) =>
+        `${(index + 1).toString(16).padStart(8, '0')}-1111-4111-8111-${(index + 1).toString(16).padStart(12, '0')}`,
+      )
+      const fixtures = generateAutoFixtures('demo-tourney', teamIds, ['Çarşamba'], ['18:00', '19:00'], 'Merkez Stadyum', '2026-09-01')
+      const weekCount = teamCount
+      const gamesPerWeek = (teamCount - 1) / 2
+      const expectedPairs = teamCount * (teamCount - 1) / 2
+      const fixturesByWeek = new Map<string, typeof fixtures>()
+      const opponentsByTeam = new Map(teamIds.map((teamId) => [teamId, new Set<string>()]))
+      const byeCounts = new Map(teamIds.map((teamId) => [teamId, 0]))
+
+      fixtures.forEach((fixture) => {
+        const weekFixtures = fixturesByWeek.get(fixture.week ?? '') ?? []
+        weekFixtures.push(fixture)
+        fixturesByWeek.set(fixture.week ?? '', weekFixtures)
+
+        const homeOpponents = opponentsByTeam.get(fixture.homeTeamId)!
+        const awayOpponents = opponentsByTeam.get(fixture.awayTeamId)!
+        expect(homeOpponents.has(fixture.awayTeamId)).toBe(false)
+        expect(awayOpponents.has(fixture.homeTeamId)).toBe(false)
+        homeOpponents.add(fixture.awayTeamId)
+        awayOpponents.add(fixture.homeTeamId)
+      })
+
+      expect(fixtures).toHaveLength(expectedPairs)
+      expect(fixturesByWeek.size).toBe(weekCount)
+      for (const weekFixtures of fixturesByWeek.values()) {
+        expect(weekFixtures).toHaveLength(gamesPerWeek)
+        const playingTeams = new Set(weekFixtures.flatMap((fixture) => [fixture.homeTeamId, fixture.awayTeamId]))
+        expect(playingTeams.size).toBe(teamCount - 1)
+        for (const teamId of teamIds) {
+          if (!playingTeams.has(teamId)) {
+            byeCounts.set(teamId, (byeCounts.get(teamId) ?? 0) + 1)
+          }
+        }
+      }
+
+      for (const teamId of teamIds) {
+        expect(opponentsByTeam.get(teamId)?.size).toBe(teamCount - 1)
+        expect(byeCounts.get(teamId)).toBe(1)
+      }
+    }
+  })
+
+  it('creates exactly N-1 complete rounds without byes for even team counts', () => {
+    for (const teamCount of [4, 6, 8, 10]) {
+      const teamIds = Array.from({ length: teamCount }, (_, index) =>
+        `${(index + 1).toString(16).padStart(8, '0')}-2222-4222-8222-${(index + 1).toString(16).padStart(12, '0')}`,
+      )
+      const fixtures = generateAutoFixtures('demo-tourney', teamIds, ['Cumartesi'], ['18:00', '19:00', '20:00'], 'Merkez Stadyum', '2026-09-01')
+      const weekCount = teamCount - 1
+      const gamesPerWeek = teamCount / 2
+      const expectedPairs = teamCount * (teamCount - 1) / 2
+      const fixturesByWeek = new Map<string, typeof fixtures>()
+      const opponentsByTeam = new Map(teamIds.map((teamId) => [teamId, new Set<string>()]))
+
+      fixtures.forEach((fixture) => {
+        const weekFixtures = fixturesByWeek.get(fixture.week ?? '') ?? []
+        weekFixtures.push(fixture)
+        fixturesByWeek.set(fixture.week ?? '', weekFixtures)
+
+        const homeOpponents = opponentsByTeam.get(fixture.homeTeamId)!
+        const awayOpponents = opponentsByTeam.get(fixture.awayTeamId)!
+        expect(homeOpponents.has(fixture.awayTeamId)).toBe(false)
+        expect(awayOpponents.has(fixture.homeTeamId)).toBe(false)
+        homeOpponents.add(fixture.awayTeamId)
+        awayOpponents.add(fixture.homeTeamId)
+      })
+
+      expect(fixtures).toHaveLength(expectedPairs)
+      expect(fixturesByWeek.size).toBe(weekCount)
+      for (const weekFixtures of fixturesByWeek.values()) {
+        expect(weekFixtures).toHaveLength(gamesPerWeek)
+        expect(new Set(weekFixtures.flatMap((fixture) => [fixture.homeTeamId, fixture.awayTeamId])).size).toBe(teamCount)
+      }
+      for (const teamId of teamIds) {
+        expect(opponentsByTeam.get(teamId)?.size).toBe(teamCount - 1)
+      }
+    }
+  })
+
   it('keeps fixture week grouping based on fixtures.week and ignores stale name-based grouping', () => {
     const fixtureRows = [
       {
