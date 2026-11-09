@@ -1,3 +1,5 @@
+import { normalizeRoleKey } from '../lib/leaguehub-data'
+
 export type RoleName = 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor'
 
 export type PermissionAction =
@@ -8,6 +10,15 @@ export type PermissionAction =
   | 'canManageSystem'
 
 export type PermissionRules = Record<PermissionAction, boolean>
+
+const normalizePermissionRole = (role: RoleName | string | null | undefined): RoleName | null => {
+  const normalized = normalizeRoleKey(role)
+  if (normalized === 'super_admin' || normalized === 'superadmin') return 'Super Admin'
+  if (normalized === 'admin' || normalized === 'yonetici') return 'Admin'
+  if (normalized === 'team_manager' || normalized === 'takim_yoneticisi') return 'Team Manager'
+  if (normalized === 'visitor' || normalized === 'user') return 'Visitor'
+  return null
+}
 
 export const ROLE_PERMISSION_RULES: Record<RoleName, PermissionRules> = {
   'Super Admin': {
@@ -41,13 +52,13 @@ export const ROLE_PERMISSION_RULES: Record<RoleName, PermissionRules> = {
 }
 
 export function checkPermission(role: RoleName | string | null | undefined, action: PermissionAction): boolean {
-  const normalized = typeof role === 'string' ? role.trim() : ''
-  const rules = ROLE_PERMISSION_RULES[normalized as RoleName]
+  const normalized = normalizePermissionRole(role)
+  const rules = normalized ? ROLE_PERMISSION_RULES[normalized] : undefined
   return Boolean(rules?.[action])
 }
 
 export function getRolePermissionSummary(role: RoleName | string | null | undefined): PermissionRules | null {
-  const normalized = typeof role === 'string' ? role.trim() : ''
-  const rules = ROLE_PERMISSION_RULES[normalized as RoleName]
+  const normalized = normalizePermissionRole(role)
+  const rules = normalized ? ROLE_PERMISSION_RULES[normalized] : undefined
   return rules ? { ...rules } : null
 }

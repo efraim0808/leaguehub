@@ -7,6 +7,7 @@ import {
   buildDisciplineRows,
   buildMatchStatistics,
   buildStandings,
+  canManageMatchControls,
   decrementSuspensionTimers,
   filterSelectablePlayers,
   canRegisterTeamToTournament,
@@ -215,12 +216,17 @@ describe('LeagueHub – full integration scenarios', () => {
   })
 
   it('grants roster editing and deletion only to admin roles', () => {
-    for (const role of ['Admin', 'Super Admin']) {
+    for (const role of ['Admin', 'ADMIN', ' Super Admin ', 'SUPER_ADMIN', 'super admin', 'superadmin', 'Süper Admin']) {
       expect(checkPermission(role, 'canAddPlayer')).toBe(true)
       expect(checkPermission(role, 'canEditPlayer')).toBe(true)
       expect(checkPermission(role, 'canDeletePlayer')).toBe(true)
     }
 
+    expect(checkPermission('ADMIN', 'canManageSystem')).toBe(true)
+    expect(checkPermission('Team_Manager', 'canAddPlayer')).toBe(true)
+    expect(canManageMatchControls('SUPER_ADMIN')).toBe(true)
+    expect(canManageMatchControls('superadmin')).toBe(true)
+    expect(canManageMatchControls('ADMIN')).toBe(true)
     expect(checkPermission('Team Manager', 'canEditPlayer')).toBe(false)
     expect(checkPermission('Team Manager', 'canDeletePlayer')).toBe(false)
     expect(checkPermission('Visitor', 'canDeletePlayer')).toBe(false)

@@ -6,6 +6,7 @@ import {
   buildUniqueAuthEmail,
   canRegisterTeamToTournament,
   normalizeFixtureDate,
+  normalizeRoleKey,
   sanitizeDisciplinePatch,
   sanitizeMatchEventPayload,
 } from '../lib/leaguehub-data'
@@ -63,8 +64,9 @@ export const TEAM_MANAGER_PERMISSION_LIST = ['oyuncu_ekleme', 'turnuva_basvurusu
 export const ADMIN_PERMISSION_LIST = ['Tüm modüller'] as const
 
 export const getRolePermissionList = (role: 'Super Admin' | 'Admin' | 'Team Manager' | 'Visitor' | 'USER'): string[] => {
-  if (role === 'Team Manager') return [...TEAM_MANAGER_PERMISSION_LIST]
-  if (role === 'Super Admin' || role === 'Admin') return [...ADMIN_PERMISSION_LIST]
+  const normalizedRole = normalizeRoleKey(role)
+  if (normalizedRole === 'team_manager' || normalizedRole === 'takim_yoneticisi') return [...TEAM_MANAGER_PERMISSION_LIST]
+  if (normalizedRole === 'super_admin' || normalizedRole === 'superadmin' || normalizedRole === 'admin' || normalizedRole === 'yonetici') return [...ADMIN_PERMISSION_LIST]
   return []
 }
 
@@ -931,6 +933,7 @@ interface AppContextType {
   updateTeam: (team: Team) => Promise<void>
   deleteTeam: (teamId: string) => Promise<void>
   updatePlayerDiscipline: (teamId: string, playerId: string, discipline: { yellowCards: number; redCards: number; suspensionMatches?: number; isSuspended: boolean }) => Promise<void>
+  updatePlayerInTeam: (teamId: string, player: Player) => Promise<void>
   setAppState: Dispatch<SetStateAction<AppState>>
   updateAppState: (nextState: AppState) => Promise<void>
   updateTournament: (tournament: Tournament) => Promise<void>
@@ -2062,6 +2065,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await refreshData()
   }
 
+  const updatePlayerInTeam = async (teamId: string, player: Player) => {
+    if (!checkPermission(session?.role, 'canEditPlayer')) {
+      throw new Error('Bu işlem için yönetici yetkisi gereklidir.')
+    }
+
+    const { data, error } = await supabase
+      .from('players')
+      .update({
+        name: player.name.trim(),
+        unit: player.unit.trim(),
+        phone: player.phone.trim(),
+        tc: player.tc.trim(),
+        photo_url: player.photoUrl?.trim() || null,
+        position: player.position ?? null,
+      })
+      .eq('id', player.id)
+      .eq('team_id', teamId)
+      .select('id')
+      .single()
+
+    if (error) throw error
+    if (!data) throw new Error('Oyuncu bulunamadı veya düzenleme yetkiniz yok.')
+
+    await refreshData()
+  }
+
   const sendMessage = async (payload: { senderId: string; senderName: string; title: string; body: string }) => {
     const { error } = await supabase.from('messages').insert({
       id: crypto.randomUUID(),
@@ -2396,6 +2425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       updateTeam,
       deleteTeam,
       updatePlayerDiscipline,
+      updatePlayerInTeam,
       setAppState,
       updateAppState,
       updateTournament,

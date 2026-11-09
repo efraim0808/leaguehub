@@ -42,7 +42,7 @@ export const normalizeRoleKey = (role?: string | null): string =>
 
 export const canManageMatchControls = (role?: string | null): boolean => {
   const normalized = normalizeRoleKey(role)
-  return normalized === 'super_admin' || normalized === 'admin'
+  return normalized === 'super_admin' || normalized === 'superadmin' || normalized === 'admin'
 }
 
 export const normalizeNumberInput = (value: number | string | null | undefined, fallbackValue = 0): number => {

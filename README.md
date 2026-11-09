@@ -33,4 +33,4 @@ See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rule
 
 ## Supabase roster permissions
 
-After applying `supabase-schema.sql`, run `supabase-player-admin-rls.sql` in the Supabase SQL Editor. It removes the broad authenticated-player write policy, allows admins to update and delete player records, preserves team-manager roster inserts, and prevents non-admin users from assigning themselves admin roles.
+After applying `supabase-schema.sql`, run `supabase-player-admin-rls.sql` in the Supabase SQL Editor. It normalizes admin-role aliases (including `SUPER_ADMIN` and `Super Admin`), removes the broad authenticated-player write policy, allows admins to update and delete player records, preserves team-manager roster inserts, and prevents non-admin users from assigning themselves admin roles.

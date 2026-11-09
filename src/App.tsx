@@ -496,7 +496,7 @@ function AppShell() {
         <Routes>
           <Route path="/" element={<HomePage currentUser={currentUser} safeTournaments={safeTournaments} sponsors={sponsors} />} />
           <Route path="/standings" element={<StandingsPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} />} />
-          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={normalizeRoleKey(activeUserRole) === 'super_admin'} />} />
+          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={['super_admin', 'superadmin'].includes(normalizeRoleKey(activeUserRole))} />} />
           <Route path="/stats" element={<Navigate to="/standings" replace />} />
           <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} canManageMatchControls={canAccessLiveMatchControls} />} />
           <Route path="/transfer-market" element={<TransferMarketPage currentUser={currentUser} />} />
@@ -804,14 +804,8 @@ function TransferMarketPage({ currentUser }: { currentUser: User | null }) {
     }
   })()
   const resolvedUserId = currentUser?.id ?? resolvedSessionSnapshot?.id ?? ''
-  const resolvedRole = String(currentUser?.role ?? resolvedSessionSnapshot?.role ?? '').trim()
-  const isSuperAdmin = (() => {
-    const normalized = resolvedRole.toLowerCase()
-    return normalized === 'super admin'
-      || normalized === 'super_admin'
-      || normalized === 'süper admin'
-      || normalized === 'süper_admin'
-  })()
+  const resolvedRole = normalizeRoleKey(String(currentUser?.role ?? resolvedSessionSnapshot?.role ?? ''))
+  const isSuperAdmin = resolvedRole === 'super_admin' || resolvedRole === 'superadmin'
 
   useEffect(() => {
     if (!currentUser) return
@@ -1699,16 +1693,20 @@ const playerPositionLabels: Record<string, string> = {
   FOR: 'Forvet',
 }
 
-function TeamDetailsModal({ standing, teams, matches, canDeletePlayers, deletingPlayerId, onDeletePlayer, onClose }: {
+function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeletePlayers, deletingPlayerId, onUpdatePlayer, onDeletePlayer, onClose }: {
   standing: StandingRow
   teams: Team[]
   matches: Match[]
+  canEditPlayers: boolean
   canDeletePlayers: boolean
   deletingPlayerId: string | null
+  onUpdatePlayer: (player: Player) => Promise<void>
   onDeletePlayer: (player: Player) => void
   onClose: () => void
 }) {
   const { team } = standing
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
+  const [isSavingPlayer, setIsSavingPlayer] = useState(false)
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow
@@ -1750,6 +1748,26 @@ function TeamDetailsModal({ standing, teams, matches, canDeletePlayers, deleting
     { label: 'Averaj', value: standing.gd > 0 ? `+${standing.gd}` : standing.gd, color: 'text-cyan-300' },
     { label: 'Puan', value: standing.pts, color: 'text-emerald-300' },
   ]
+
+  const handleSavePlayer = async () => {
+    if (!editingPlayer || isSavingPlayer) return
+    if (!/^\d{11}$/.test(editingPlayer.tc.trim())) {
+      window.alert('TC kimlik numarası tam 11 hane olmalıdır.')
+      return
+    }
+
+    setIsSavingPlayer(true)
+    try {
+      await onUpdatePlayer(editingPlayer)
+      setEditingPlayer(null)
+    } catch (error) {
+      console.error('Team details player update failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Oyuncu güncellenemedi: ${message}`)
+    } finally {
+      setIsSavingPlayer(false)
+    }
+  }
 
   return (
     <div
@@ -1881,16 +1899,34 @@ function TeamDetailsModal({ standing, teams, matches, canDeletePlayers, deleting
                       </div>
                       <div className="mt-1 text-xs text-slate-400">{player.position ? playerPositionLabels[player.position] ?? player.position : 'Mevki belirtilmemiş'}</div>
                     </div>
-                    {canDeletePlayers ? (
-                      <button
-                        type="button"
-                        onClick={() => onDeletePlayer(player)}
-                        disabled={deletingPlayerId === player.id}
-                        aria-label={`${player.name} oyuncusunu takımdan çıkar`}
-                        className="ml-auto shrink-0 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2 text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-50"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                    {canEditPlayers || canDeletePlayers ? (
+                      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                        {canEditPlayers ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPlayer({ ...player })
+                            }}
+                            aria-label={`${player.name} oyuncusunu düzenle`}
+                            title="Oyuncuyu düzenle"
+                            className="rounded-xl border border-slate-700 bg-slate-900 p-2 text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+                          >
+                            <PencilLine size={14} />
+                          </button>
+                        ) : null}
+                        {canDeletePlayers ? (
+                          <button
+                            type="button"
+                            onClick={() => onDeletePlayer(player)}
+                            disabled={deletingPlayerId === player.id}
+                            aria-label={`${player.name} oyuncusunu takımdan çıkar`}
+                            title="Oyuncuyu takımdan çıkar"
+                            className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-2 text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 ))}
@@ -1903,6 +1939,62 @@ function TeamDetailsModal({ standing, teams, matches, canDeletePlayers, deleting
           </section>
         </div>
       </section>
+      {editingPlayer ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm" onClick={() => setEditingPlayer(null)}>
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="team-player-edit-title"
+            onClick={(event) => event.stopPropagation()}
+            className="w-full max-w-md rounded-[26px] border border-slate-700 bg-slate-900 p-5 shadow-[0_30px_80px_rgba(15,23,42,0.9)]"
+          >
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.25em] text-cyan-300">{team.name}</div>
+                <h3 id="team-player-edit-title" className="mt-1 text-xl font-black text-white">Oyuncu bilgilerini düzenle</h3>
+              </div>
+              <button type="button" onClick={() => setEditingPlayer(null)} aria-label="Düzenlemeyi kapat" className="rounded-full border border-slate-700 p-2 text-slate-300 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <label className="block text-sm text-slate-300">
+                Ad Soyad
+                <input value={editingPlayer.name} onChange={(event) => setEditingPlayer({ ...editingPlayer, name: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+              </label>
+              <label className="block text-sm text-slate-300">
+                Birim / Hastane
+                <input value={editingPlayer.unit} onChange={(event) => setEditingPlayer({ ...editingPlayer, unit: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+              </label>
+              <label className="block text-sm text-slate-300">
+                Mevki
+                <select value={editingPlayer.position ?? 'KL'} onChange={(event) => setEditingPlayer({ ...editingPlayer, position: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white">
+                  <option value="KL">Kaleci</option>
+                  <option value="DEF">Defans</option>
+                  <option value="ORT">Orta saha</option>
+                  <option value="FOR">Forvet</option>
+                </select>
+              </label>
+              <label className="block text-sm text-slate-300">
+                Telefon
+                <input value={editingPlayer.phone} onChange={(event) => setEditingPlayer({ ...editingPlayer, phone: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+              </label>
+              <label className="block text-sm text-slate-300">
+                TC
+                <input value={editingPlayer.tc} onChange={(event) => setEditingPlayer({ ...editingPlayer, tc: event.target.value })} inputMode="numeric" maxLength={11} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+              </label>
+              <label className="block text-sm text-slate-300">
+                Profil Resmi URL
+                <input value={editingPlayer.photoUrl ?? ''} onChange={(event) => setEditingPlayer({ ...editingPlayer, photoUrl: event.target.value })} className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingPlayer(null)} disabled={isSavingPlayer} className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200">İptal</button>
+              <button type="button" onClick={() => void handleSavePlayer()} disabled={isSavingPlayer} className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">{isSavingPlayer ? 'Kaydediliyor...' : 'Kaydet'}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -2117,7 +2209,7 @@ function FixtureWeekCarousel({
 }
 
 function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches: Match[] }) {
-  const { appState, session, updatePlayerDiscipline, setAppState, refreshData, removePlayerFromTeam } = useAppContext()
+  const { appState, session, updatePlayerDiscipline, setAppState, refreshData, updatePlayerInTeam, removePlayerFromTeam } = useAppContext()
   const [activeStandingsTab, setActiveStandingsTab] = useState<LeagueTab>('standings')
   const [selectedFixtureWeek, setSelectedFixtureWeek] = useState('')
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null)
@@ -2132,6 +2224,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
   })
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const canEditPlayers = checkPermission(session?.role, 'canEditPlayer')
   const canDeletePlayers = checkPermission(session?.role, 'canDeletePlayer')
   const tournament = safeTournaments.find((item) => item.status === 'Turnuva Başladı') ?? safeTournaments[0]
 
@@ -2567,8 +2660,10 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
               standing={selectedStanding}
               teams={safeTeams}
               matches={matches}
+              canEditPlayers={canEditPlayers}
               canDeletePlayers={canDeletePlayers}
               deletingPlayerId={deletingPlayerId}
+              onUpdatePlayer={(player) => updatePlayerInTeam(selectedStanding.team.id, player)}
               onDeletePlayer={(player) => void handleRemoveTeamPlayer(player)}
               onClose={() => setSelectedTeamId(null)}
             />
@@ -3774,12 +3869,7 @@ function GalleryPage({ currentUser }: { currentUser: User | null }) {
   const [newGalleryUrl, setNewGalleryUrl] = useState('')
   const [isSubmittingGallery, setIsSubmittingGallery] = useState(false)
 
-  const normalizedRole = String(currentUser?.role ?? '').trim().toLowerCase()
-  const canManageGallery = normalizedRole.includes('super_admin')
-    || normalizedRole.includes('super admin')
-    || normalizedRole.includes('admin')
-    || normalizedRole.includes('yönetici')
-    || normalizedRole.includes('yonetici')
+  const canManageGallery = checkPermission(currentUser?.role, 'canManageSystem')
 
   const handleDeleteGalleryItem = async (item: { id: string; title?: string }) => {
     if (!item?.id || !canManageGallery) return
@@ -4010,7 +4100,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   sponsors: SponsorRecord[]
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
-  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, removePlayerFromTeam, refreshData } = useAppContext()
+  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updatePlayerInTeam, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, removePlayerFromTeam, refreshData } = useAppContext()
   const [pendingRoleRequestsCount, setPendingRoleRequestsCount] = useState(0)
   const [requestSent, setRequestSent] = useState(false)
 
@@ -4137,10 +4227,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     location: '',
   })
 
-  const normalizeRole = (role?: string | null) => (role ?? '').trim().toLowerCase()
-
-  const normalizedRole = normalizeRole(currentUser?.role)
-  const isAdmin = normalizedRole.includes('admin') || normalizedRole.includes('super') || normalizedRole.includes('süper') || normalizedRole.includes('yönetici') || normalizedRole.includes('yonetici')
+  const normalizedRole = normalizeRoleKey(currentUser?.role)
+  const isAdmin = ['admin', 'super_admin', 'superadmin', 'yonetici'].includes(normalizedRole)
   const canSeeMinimalAdminPanel = isAdmin
   const canManageSponsors = isAdmin
   const canManageTournamentSettings = isAdmin
@@ -4410,30 +4498,18 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     }
 
     const team = safeTeams.find((item) => item.id === playerEditor.teamId)
-    if (!team) return
-
-    const nextPlayers = team.players.map((member) =>
-      member.id === playerEditor.playerId
-        ? {
-            ...member,
-            name: playerEditor.name.trim() || member.name,
-            unit: playerEditor.unit.trim() || member.unit,
-            phone: playerEditor.phone.trim() || member.phone,
-            tc: cleanTc,
-            photoUrl: playerEditor.photoUrl.trim() || undefined,
-            position: playerEditor.position,
-          }
-        : member,
-    )
+    const player = team?.players.find((member) => member.id === playerEditor.playerId)
+    if (!team || !player) return
 
     try {
-      await updateAppState({
-        ...appState,
-        teams: safeTeams.map((item) =>
-          item.id === playerEditor.teamId
-            ? { ...item, players: nextPlayers }
-            : item,
-        ),
+      await updatePlayerInTeam(team.id, {
+        ...player,
+        name: playerEditor.name.trim() || player.name,
+        unit: playerEditor.unit.trim() || player.unit,
+        phone: playerEditor.phone.trim() || player.phone,
+        tc: cleanTc,
+        photoUrl: playerEditor.photoUrl.trim() || undefined,
+        position: playerEditor.position,
       })
       setPlayerEditor(null)
     } catch (error) {
@@ -4887,7 +4963,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const profileSummaryCards = (() => {
-    const role = normalizeRole(currentUser?.role)
+    const role = normalizedRole
     const teamCount = safeTeams.filter((team) => team.managerId === currentUser?.id).length
     const playerCount = safeTeams.filter((team) => team.managerId === currentUser?.id).reduce((total, team) => total + (team.players?.length ?? 0), 0)
 
@@ -4899,7 +4975,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       ]
     }
 
-    if (role === 'team manager') {
+    if (role === 'team_manager') {
       return [
         { label: 'Takım', value: String(teamCount || 1), tone: 'text-violet-300', accent: 'bg-violet-500/10' },
         { label: 'Oyuncu', value: String(playerCount || 0), tone: 'text-cyan-300', accent: 'bg-cyan-500/10' },
@@ -4952,7 +5028,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     }
   }
 
-  const canApprovePendingTeamApplications = normalizedRole.includes('admin') || normalizedRole.includes('super') || normalizedRole.includes('süper') || normalizedRole.includes('yönetici') || normalizedRole.includes('yonetici')
+  const canApprovePendingTeamApplications = isAdmin
 
   const handleApproveTournamentTeamApplication = async (team: Team) => {
     if (!canApprovePendingTeamApplications) {
@@ -5853,7 +5929,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         </div>
       ) : null}
 
-      {currentUser && normalizeRole(currentUser.role) === 'user' ? (
+      {currentUser && normalizedRole === 'user' ? (
         <div className="rounded-[28px] border border-cyan-500/30 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(15,23,42,1))] p-4 shadow-[0_18px_40px_rgba(34,211,238,0.12)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
