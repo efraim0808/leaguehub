@@ -4051,6 +4051,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     position: 'KL' as 'KL' | 'DEF' | 'ORT' | 'FOR',
   })
   const [showPlayerList, setShowPlayerList] = useState(false)
+  const [selectedRosterTeamId, setSelectedRosterTeamId] = useState<string | null>(null)
   const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null)
   const [playerEditor, setPlayerEditor] = useState<{
     teamId: string
@@ -4335,6 +4336,9 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     : isAdmin
       ? safeTeams
       : safeTeams.filter((team) => team.managerId === currentUser.id || team.id === currentUser.teamId)
+  const teamsInPlayerList = selectedRosterTeamId
+    ? managedTeamsForCurrentUser.filter((team) => team.id === selectedRosterTeamId)
+    : managedTeamsForCurrentUser
 
   const handleAddPlayer = async () => {
     if (!currentUser) return
@@ -5129,11 +5133,18 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] uppercase tracking-[0.3em] text-cyan-300">Oyuncu Listesi</div>
-                <h3 className="mt-2 text-xl font-black text-white">Takım kadrosu</h3>
+                <h3 className="mt-2 text-xl font-black text-white">
+                  {selectedRosterTeamId
+                    ? teamsInPlayerList[0]?.name ?? 'Takım kadrosu'
+                    : 'Takım kadrosu'}
+                </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setShowPlayerList(false)}
+                onClick={() => {
+                  setShowPlayerList(false)
+                  setSelectedRosterTeamId(null)
+                }}
                 className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-xl font-bold text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
                 aria-label="Oyuncu listesini kapat"
                 title="Kapat"
@@ -5143,8 +5154,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
             </div>
 
             <div className="max-h-[70vh] space-y-3 overflow-y-auto pr-1">
-              {managedTeamsForCurrentUser.length > 0 ? (
-                managedTeamsForCurrentUser.map((team) => (
+              {teamsInPlayerList.length > 0 ? (
+                teamsInPlayerList.map((team) => (
                   <div key={team.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
                     <div className="mb-3 text-[10px] uppercase tracking-[0.2em] text-slate-400">{team.name}</div>
                     {team.players.length > 0 ? (
@@ -5174,6 +5185,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                                   type="button"
                                   onClick={() => {
                                     setShowPlayerList(false)
+                                    setSelectedRosterTeamId(null)
                                     handleEditPlayer(team.id, player)
                                   }}
                                   className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
@@ -5372,29 +5384,29 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
               {adminTab === 'teams' ? (
                 <div className="space-y-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Kadro Yönetimi</div>
-                      <h4 className="mt-2 text-xl font-black text-white">Takımlar ve oyuncular</h4>
-                      <p className="mt-1 text-sm text-slate-400">Tüm takımların kadrolarını görüntüleyin, oyuncu bilgilerini düzenleyin veya oyuncuyu kadrodan çıkarın.</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowPlayerList(true)}
-                      className="shrink-0 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
-                    >
-                      Kadroları Yönet
-                    </button>
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Kadro Yönetimi</div>
+                    <h4 className="mt-2 text-xl font-black text-white">Takımlar ve oyuncular</h4>
+                    <p className="mt-1 text-sm text-slate-400">Kadro detaylarını açmak ve oyuncuları yönetmek için bir takım seçin.</p>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {safeTeams.map((team) => (
-                      <div key={team.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                      <button
+                        key={team.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedRosterTeamId(team.id)
+                          setShowPlayerList(true)
+                        }}
+                        aria-label={`${team.name} takımının kadrosunu aç`}
+                        className="flex w-full items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 text-left transition hover:border-cyan-500/40 hover:bg-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      >
                         <div className="min-w-0">
                           <div className="truncate font-semibold text-white">{team.name}</div>
                           <div className="mt-1 text-xs text-slate-400">{team.city} · {(team.players ?? []).length} oyuncu</div>
                         </div>
                         <span className="shrink-0 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[10px] font-semibold text-slate-300">{team.status}</span>
-                      </div>
+                      </button>
                     ))}
                     {safeTeams.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">Henüz takım bulunmuyor.</div>
