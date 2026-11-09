@@ -214,6 +214,18 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(teamManager.permissions.takimYonetimi).toBe(false)
   })
 
+  it('grants roster editing and deletion only to admin roles', () => {
+    for (const role of ['Admin', 'Super Admin']) {
+      expect(checkPermission(role, 'canAddPlayer')).toBe(true)
+      expect(checkPermission(role, 'canEditPlayer')).toBe(true)
+      expect(checkPermission(role, 'canDeletePlayer')).toBe(true)
+    }
+
+    expect(checkPermission('Team Manager', 'canEditPlayer')).toBe(false)
+    expect(checkPermission('Team Manager', 'canDeletePlayer')).toBe(false)
+    expect(checkPermission('Visitor', 'canDeletePlayer')).toBe(false)
+  })
+
   it('creates four real visitor test credentials with Visitor role and known passwords', () => {
     const visitors = getVisitorTestUsers()
 

@@ -10,6 +10,7 @@ import {
   sanitizeMatchEventPayload,
 } from '../lib/leaguehub-data'
 import { subscribeToLeaguehubRealtime, supabase } from '../lib/supabase'
+import { checkPermission } from '../utils/permissions'
 import type {
   AppState,
   ContactMessage,
@@ -2044,10 +2045,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }
 
   const removePlayerFromTeam = async (playerId: string) => {
-    const { error } = await supabase.from('players').delete().eq('id', playerId)
-    if (!error) {
-      await refreshData()
+    if (!checkPermission(session?.role, 'canDeletePlayer')) {
+      throw new Error('Bu işlem için yönetici yetkisi gereklidir.')
     }
+
+    const { data, error } = await supabase
+      .from('players')
+      .delete()
+      .eq('id', playerId)
+      .select('id')
+      .single()
+
+    if (error) throw error
+    if (!data) throw new Error('Oyuncu bulunamadı veya silme yetkiniz yok.')
+
+    await refreshData()
   }
 
   const sendMessage = async (payload: { senderId: string; senderName: string; title: string; body: string }) => {

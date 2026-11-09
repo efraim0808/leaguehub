@@ -1699,7 +1699,15 @@ const playerPositionLabels: Record<string, string> = {
   FOR: 'Forvet',
 }
 
-function TeamDetailsModal({ standing, teams, matches, onClose }: { standing: StandingRow; teams: Team[]; matches: Match[]; onClose: () => void }) {
+function TeamDetailsModal({ standing, teams, matches, canDeletePlayers, deletingPlayerId, onDeletePlayer, onClose }: {
+  standing: StandingRow
+  teams: Team[]
+  matches: Match[]
+  canDeletePlayers: boolean
+  deletingPlayerId: string | null
+  onDeletePlayer: (player: Player) => void
+  onClose: () => void
+}) {
   const { team } = standing
 
   useEffect(() => {
@@ -1873,6 +1881,17 @@ function TeamDetailsModal({ standing, teams, matches, onClose }: { standing: Sta
                       </div>
                       <div className="mt-1 text-xs text-slate-400">{player.position ? playerPositionLabels[player.position] ?? player.position : 'Mevki belirtilmemiş'}</div>
                     </div>
+                    {canDeletePlayers ? (
+                      <button
+                        type="button"
+                        onClick={() => onDeletePlayer(player)}
+                        disabled={deletingPlayerId === player.id}
+                        aria-label={`${player.name} oyuncusunu takımdan çıkar`}
+                        className="ml-auto shrink-0 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2 text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -2098,9 +2117,10 @@ function FixtureWeekCarousel({
 }
 
 function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches: Match[] }) {
-  const { appState, updatePlayerDiscipline, setAppState, refreshData } = useAppContext()
+  const { appState, session, updatePlayerDiscipline, setAppState, refreshData, removePlayerFromTeam } = useAppContext()
   const [activeStandingsTab, setActiveStandingsTab] = useState<LeagueTab>('standings')
   const [selectedFixtureWeek, setSelectedFixtureWeek] = useState('')
+  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null)
   const [disciplineModalOpen, setDisciplineModalOpen] = useState(false)
   const [disciplineDraft, setDisciplineDraft] = useState<{ teamId: string; playerId: string; yellowCards: number | ''; redCards: number | ''; suspensionMatches: number | ''; isSuspended: boolean }>({
     teamId: '',
@@ -2112,7 +2132,24 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
   })
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
+  const canDeletePlayers = checkPermission(session?.role, 'canDeletePlayer')
   const tournament = safeTournaments.find((item) => item.status === 'Turnuva Başladı') ?? safeTournaments[0]
+
+  const handleRemoveTeamPlayer = async (player: Player) => {
+    if (!canDeletePlayers || deletingPlayerId) return
+    if (!window.confirm(`${player.name} oyuncusu takımdan çıkarılsın mı? Bu işlem oyuncu kaydını kalıcı olarak siler.`)) return
+
+    setDeletingPlayerId(player.id)
+    try {
+      await removePlayerFromTeam(player.id)
+    } catch (error) {
+      console.error('Team roster player removal failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Oyuncu takımdan çıkarılamadı: ${message}`)
+    } finally {
+      setDeletingPlayerId(null)
+    }
+  }
 
   const standings = useMemo<StandingRow[]>(() => {
     const resultMap = new Map<string, { teamId: string; played: number; won: number; draw: number; lost: number; gf: number; ga: number; pts: number }>()
@@ -2526,7 +2563,15 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
       {selectedTeamId ? (() => {
         const selectedStanding = standings.find((row) => row.team.id === selectedTeamId)
         return selectedStanding
-          ? <TeamDetailsModal standing={selectedStanding} teams={safeTeams} matches={matches} onClose={() => setSelectedTeamId(null)} />
+          ? <TeamDetailsModal
+              standing={selectedStanding}
+              teams={safeTeams}
+              matches={matches}
+              canDeletePlayers={canDeletePlayers}
+              deletingPlayerId={deletingPlayerId}
+              onDeletePlayer={(player) => void handleRemoveTeamPlayer(player)}
+              onClose={() => setSelectedTeamId(null)}
+            />
           : null
       })() : null}
 
@@ -3965,7 +4010,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   sponsors: SponsorRecord[]
   setSponsors: React.Dispatch<React.SetStateAction<SponsorRecord[]>>
 }) {
-  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, refreshData } = useAppContext()
+  const { appState, approveTeamManagerRoleRequest, rejectTeamManagerRoleRequest, approveTournamentApplication, updateAppState, updateTournament, loadTournaments, deleteTournament, deleteTeam, resolvePasswordResetRequest, addPlayerToTeam, removePlayerFromTeam, refreshData } = useAppContext()
   const [pendingRoleRequestsCount, setPendingRoleRequestsCount] = useState(0)
   const [requestSent, setRequestSent] = useState(false)
 
@@ -4006,6 +4051,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     position: 'KL' as 'KL' | 'DEF' | 'ORT' | 'FOR',
   })
   const [showPlayerList, setShowPlayerList] = useState(false)
+  const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null)
   const [playerEditor, setPlayerEditor] = useState<{
     teamId: string
     playerId: string
@@ -4019,7 +4065,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   const [resetPasswordForm, setResetPasswordForm] = useState<Record<string, string>>({})
   const [resetPasswordMessage, setResetPasswordMessage] = useState('')
   const [adminModal, setAdminModal] = useState<'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | 'announcements' | null>(null)
-  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | 'announcements'>('overview')
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'teams' | 'tournaments' | 'home' | 'fixture' | 'password-requests' | 'sponsors' | 'live-broadcast' | 'announcements'>('overview')
   const [fixtureForm, setFixtureForm] = useState<{ tournamentId: string; days: string[]; times: string[]; venue: string }>({
     tournamentId: safeTournaments[0]?.id ?? '',
     days: ['Salı', 'Perşembe'],
@@ -4284,10 +4330,11 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     }
   }
 
-  const managedTeamsForCurrentUser = useMemo(() => {
-    if (!currentUser) return []
-    return safeTeams.filter((team) => team.managerId === currentUser.id || team.id === currentUser.teamId)
-  }, [currentUser, safeTeams])
+  const managedTeamsForCurrentUser = !currentUser
+    ? []
+    : isAdmin
+      ? safeTeams
+      : safeTeams.filter((team) => team.managerId === currentUser.id || team.id === currentUser.teamId)
 
   const handleAddPlayer = async () => {
     if (!currentUser) return
@@ -4336,6 +4383,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleEditPlayer = (teamId: string, player: Player) => {
+    if (!canEditPlayer) return
     setPlayerEditor({
       teamId,
       playerId: player.id,
@@ -4349,7 +4397,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
   }
 
   const handleSaveEditedPlayer = async () => {
-    if (!playerEditor) return
+    if (!playerEditor || !canEditPlayer) return
 
     const cleanTc = playerEditor.tc.trim()
     if (!/^\d{11}$/.test(cleanTc)) {
@@ -4374,16 +4422,38 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         : member,
     )
 
-    await updateAppState({
-      ...appState,
-      teams: safeTeams.map((item) =>
-        item.id === playerEditor.teamId
-          ? { ...item, players: nextPlayers }
-          : item,
-      ),
-    })
+    try {
+      await updateAppState({
+        ...appState,
+        teams: safeTeams.map((item) =>
+          item.id === playerEditor.teamId
+            ? { ...item, players: nextPlayers }
+            : item,
+        ),
+      })
+      setPlayerEditor(null)
+    } catch (error) {
+      console.error('Player update failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Oyuncu güncellenemedi: ${message}`)
+    }
+  }
 
-    setPlayerEditor(null)
+  const handleDeletePlayer = async (team: Team, player: Player) => {
+    if (!canDeletePlayer || deletingPlayerId) return
+    if (!window.confirm(`${player.name}, ${team.name} kadrosundan çıkarılsın mı? Oyuncu kaydı kalıcı olarak silinecektir.`)) return
+
+    setDeletingPlayerId(player.id)
+    try {
+      await removePlayerFromTeam(player.id)
+      setGlobalToast({ type: 'success', message: `${player.name} takımdan çıkarıldı.` })
+    } catch (error) {
+      console.error('Player removal failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Oyuncu takımdan çıkarılamadı: ${message}`)
+    } finally {
+      setDeletingPlayerId(null)
+    }
   }
 
   const handleAddAnnouncement = async (event?: React.FormEvent<HTMLFormElement>) => {
@@ -4757,6 +4827,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
   const adminTabs = [
     { id: 'overview', label: 'Özet', description: 'Genel bakış' },
+    { id: 'teams', label: 'Takım Kadroları', description: 'Oyuncu yönetimi' },
     { id: 'tournaments', label: 'Turnuvalar', description: 'Planlama' },
     { id: 'users', label: 'Onaylar', description: 'İzin ve başvurular' },
     { id: 'fixture', label: 'Fikstür', description: 'Otomasyon' },
@@ -4970,7 +5041,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
 
       </div>
 
-      {currentUser && (currentUser.role === 'Team Manager' || currentUser.role === 'Admin' || currentUser.role === 'Super Admin') ? (
+      {currentUser && checkPermission(currentUser.role, 'canAddPlayer') ? (
         <div className="rounded-[28px] border border-slate-800 bg-slate-900/80 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.25)]">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -5097,18 +5168,34 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                               </div>
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowPlayerList(false)
-                                handleEditPlayer(team.id, player)
-                              }}
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
-                              aria-label={`${player.name} oyuncusunu düzenle`}
-                              title="Oyuncuyu düzenle"
-                            >
-                              <PencilLine size={14} />
-                            </button>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {canEditPlayer ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowPlayerList(false)
+                                    handleEditPlayer(team.id, player)
+                                  }}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-700 bg-slate-950 text-slate-200 transition hover:border-cyan-500/40 hover:text-cyan-200"
+                                  aria-label={`${player.name} oyuncusunu düzenle`}
+                                  title="Oyuncuyu düzenle"
+                                >
+                                  <PencilLine size={14} />
+                                </button>
+                              ) : null}
+                              {canDeletePlayer ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void handleDeletePlayer(team, player)}
+                                  disabled={deletingPlayerId === player.id}
+                                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20 disabled:cursor-wait disabled:opacity-50"
+                                  aria-label={`${player.name} oyuncusunu takımdan çıkar`}
+                                  title="Oyuncuyu takımdan çıkar"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              ) : null}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -5279,6 +5366,39 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                         {module.label}
                       </button>
                     ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {adminTab === 'teams' ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-[0.28em] text-cyan-300">Kadro Yönetimi</div>
+                      <h4 className="mt-2 text-xl font-black text-white">Takımlar ve oyuncular</h4>
+                      <p className="mt-1 text-sm text-slate-400">Tüm takımların kadrolarını görüntüleyin, oyuncu bilgilerini düzenleyin veya oyuncuyu kadrodan çıkarın.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowPlayerList(true)}
+                      className="shrink-0 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-400"
+                    >
+                      Kadroları Yönet
+                    </button>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {safeTeams.map((team) => (
+                      <div key={team.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+                        <div className="min-w-0">
+                          <div className="truncate font-semibold text-white">{team.name}</div>
+                          <div className="mt-1 text-xs text-slate-400">{team.city} · {(team.players ?? []).length} oyuncu</div>
+                        </div>
+                        <span className="shrink-0 rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[10px] font-semibold text-slate-300">{team.status}</span>
+                      </div>
+                    ))}
+                    {safeTeams.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed border-slate-700 p-4 text-sm text-slate-400">Henüz takım bulunmuyor.</div>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
