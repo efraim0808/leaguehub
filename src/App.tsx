@@ -10,6 +10,7 @@ import {
   Home,
   Image as ImageIcon,
   LogOut,
+  MapPin,
   PencilLine,
   PlayCircle,
   Plus,
@@ -19,6 +20,7 @@ import {
   Trash2,
   Trophy,
   UserRound,
+  Users,
   Video,
   X,
 } from 'lucide-react'
@@ -1678,6 +1680,214 @@ function HomePage({ currentUser, safeTournaments, sponsors }: {
 
 type LeagueTab = 'standings' | 'fixtures' | 'stats' | 'discipline'
 
+type StandingRow = {
+  team: Team
+  played: number
+  won: number
+  draw: number
+  lost: number
+  gf: number
+  ga: number
+  pts: number
+  gd: number
+}
+
+const playerPositionLabels: Record<string, string> = {
+  KL: 'Kaleci',
+  DEF: 'Defans',
+  ORT: 'Orta saha',
+  FOR: 'Forvet',
+}
+
+function TeamDetailsModal({ standing, teams, matches, onClose }: { standing: StandingRow; teams: Team[]; matches: Match[]; onClose: () => void }) {
+  const { team } = standing
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  const recentMatches = matches
+    .filter((match) =>
+      match.status === 'Bitti'
+      && (match.homeTeamId === team.id || match.awayTeamId === team.id),
+    )
+    .sort((left, right) => {
+      const getTimestamp = (match: Match) => {
+        const timestamp = new Date(`${match.matchDate ?? ''}T${match.matchTime ?? '00:00'}:00`).getTime()
+        return Number.isNaN(timestamp) ? 0 : timestamp
+      }
+
+      return getTimestamp(right) - getTimestamp(left)
+    })
+    .slice(0, 5)
+
+  const statistics = [
+    { label: 'Oynanan maç', value: standing.played, color: 'text-white' },
+    { label: 'Galibiyet', value: standing.won, color: 'text-emerald-300' },
+    { label: 'Beraberlik', value: standing.draw, color: 'text-amber-300' },
+    { label: 'Mağlubiyet', value: standing.lost, color: 'text-rose-300' },
+    { label: 'Atılan gol', value: standing.gf, color: 'text-cyan-300' },
+    { label: 'Yenilen gol', value: standing.ga, color: 'text-slate-300' },
+    { label: 'Averaj', value: standing.gd > 0 ? `+${standing.gd}` : standing.gd, color: 'text-cyan-300' },
+    { label: 'Puan', value: standing.pts, color: 'text-emerald-300' },
+  ]
+
+  return (
+    <div
+      className="team-details-backdrop fixed inset-0 z-[60] flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="team-details-title"
+        onClick={(event) => event.stopPropagation()}
+        className="team-details-panel w-full max-w-2xl overflow-y-auto rounded-t-[28px] border border-slate-700 bg-slate-900 shadow-[0_30px_80px_rgba(15,23,42,0.9)] sm:rounded-[28px]"
+      >
+        <div className="sticky top-0 z-10 border-b border-slate-800 bg-[linear-gradient(135deg,rgba(34,211,238,0.14),rgba(15,23,42,0.98))] px-4 py-4 sm:px-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <TeamLogo team={team} size={52} />
+              <div className="min-w-0">
+                <h2 id="team-details-title" className="truncate text-xl font-black text-white sm:text-2xl">{team.name}</h2>
+                <div className="mt-1 flex items-center gap-1.5 text-sm text-slate-300">
+                  <MapPin size={14} className="shrink-0 text-cyan-300" />
+                  <span className="truncate">{team.city || 'Şehir belirtilmedi'}</span>
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Takım detayını kapat"
+              className="rounded-full border border-slate-700 bg-slate-950/60 p-2 text-slate-300 transition hover:border-slate-500 hover:text-white"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6 p-4 sm:p-6">
+          <section aria-label="Takım istatistikleri">
+            <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-200">
+              <Trophy size={16} className="text-amber-300" />
+              Genel istatistikler
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {statistics.map((statistic) => (
+                <div key={statistic.label} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                  <div className={`text-xl font-black ${statistic.color}`}>{statistic.value}</div>
+                  <div className="mt-1 text-[11px] text-slate-400">{statistic.label}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-200">
+              <CalendarDays size={16} className="text-cyan-300" />
+              Son maçlar
+              <span className="text-xs font-medium text-slate-500">(form)</span>
+            </div>
+            {recentMatches.length > 0 ? (
+              <div className="space-y-2">
+                {recentMatches.map((match) => {
+                  const isHome = match.homeTeamId === team.id
+                  const teamGoals = isHome ? match.homeScore : match.awayScore
+                  const opponentGoals = isHome ? match.awayScore : match.homeScore
+                  const opponentId = isHome ? match.awayTeamId : match.homeTeamId
+                  const opponentName = (isHome ? match.awayTeamName : match.homeTeamName)
+                    || (isHome ? match.away_team?.name : match.home_team?.name)
+                    || teams.find((candidate) => candidate.id === opponentId)?.name
+                    || 'Rakip takım'
+                  const result = teamGoals > opponentGoals ? 'G' : teamGoals < opponentGoals ? 'M' : 'B'
+                  const resultStyles = result === 'G'
+                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                    : result === 'M'
+                      ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+                      : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+
+                  return (
+                    <div key={match.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 px-3 py-2.5">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-white">{opponentName}</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          {match.matchDate ? formatFixtureDateForDisplay(match.matchDate) : 'Tarih belirtilmedi'}
+                          <span className="mx-1.5">·</span>
+                          {isHome ? 'İç saha' : 'Deplasman'}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="font-black text-white">{teamGoals} - {opponentGoals}</span>
+                        <span className={`grid h-7 w-7 place-items-center rounded-full border text-xs font-black ${resultStyles}`} aria-label={result === 'G' ? 'Galibiyet' : result === 'M' ? 'Mağlubiyet' : 'Beraberlik'}>
+                          {result}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-center text-sm text-slate-400">
+                Tamamlanmış maç kaydı bulunmuyor.
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                <Users size={16} className="text-violet-300" />
+                Takım kadrosu
+              </div>
+              <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2.5 py-1 text-xs font-semibold text-slate-300">
+                {(team.players ?? []).length} oyuncu
+              </span>
+            </div>
+            {(team.players ?? []).length > 0 ? (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(team.players ?? []).map((player) => (
+                  <div key={player.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
+                    {player.photoUrl ? (
+                      <img src={player.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-700 object-cover" />
+                    ) : (
+                      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-slate-700 bg-slate-800 text-sm font-bold text-cyan-200">
+                        {player.name.slice(0, 1).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-sm font-semibold text-white">{player.name}</span>
+                        {player.isCaptain ? <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">Kaptan</span> : null}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">{player.position ? playerPositionLabels[player.position] ?? player.position : 'Mevki belirtilmemiş'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-950/40 p-4 text-center text-sm text-slate-400">
+                Takım kadrosunda henüz oyuncu bulunmuyor.
+              </div>
+            )}
+          </section>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function LeagueTabBar({ activeTab, onChange }: { activeTab: LeagueTab; onChange: (nextTab: LeagueTab) => void }) {
   const tabs: { id: LeagueTab; label: string }[] = [
     { id: 'standings', label: 'Puan Durumu' },
@@ -1901,9 +2111,10 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
     isSuspended: false,
   })
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null)
   const tournament = safeTournaments.find((item) => item.status === 'Turnuva Başladı') ?? safeTournaments[0]
 
-  const standings = useMemo(() => {
+  const standings = useMemo<StandingRow[]>(() => {
     const resultMap = new Map<string, { teamId: string; played: number; won: number; draw: number; lost: number; gf: number; ga: number; pts: number }>()
     const completedMatches = (matches ?? []).filter((match) => match.status === 'Bitti')
 
@@ -2286,10 +2497,15 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
                   >
                     <td className="px-1 py-2 text-left font-black text-cyan-300">{index + 1}</td>
                     <td className="px-1 py-2">
-                      <div className="flex max-w-full items-center gap-1.5 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTeamId(row.team.id)}
+                        aria-label={`${row.team.name} takım detaylarını görüntüle`}
+                        className="flex max-w-full items-center gap-1.5 overflow-hidden rounded-md text-left transition hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      >
                         <TeamLogo team={row.team} size={16} />
                         <span className="truncate font-semibold text-white">{row.team.name}</span>
-                      </div>
+                      </button>
                     </td>
                     <td className="px-1 py-2 text-center">{row.played}</td>
                     <td className="px-1 py-2 text-center text-emerald-300">{row.won}</td>
@@ -2306,6 +2522,13 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
           </div>
         </div>
       ) : null}
+
+      {selectedTeamId ? (() => {
+        const selectedStanding = standings.find((row) => row.team.id === selectedTeamId)
+        return selectedStanding
+          ? <TeamDetailsModal standing={selectedStanding} teams={safeTeams} matches={matches} onClose={() => setSelectedTeamId(null)} />
+          : null
+      })() : null}
 
       {activeStandingsTab === 'fixtures' ? (
         <div className="space-y-4 rounded-[28px] border border-slate-800 bg-slate-900 p-4">
