@@ -8,6 +8,7 @@ import {
   buildMatchStatistics,
   buildStandings,
   canManageMatchControls,
+  deduplicatePlayers,
   decrementSuspensionTimers,
   filterSelectablePlayers,
   canRegisterTeamToTournament,
@@ -230,6 +231,28 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(checkPermission('Team Manager', 'canEditPlayer')).toBe(false)
     expect(checkPermission('Team Manager', 'canDeletePlayer')).toBe(false)
     expect(checkPermission('Visitor', 'canDeletePlayer')).toBe(false)
+  })
+
+  it('deduplicates roster players by ID and normalized full name', () => {
+    const players = [
+      { id: 'player-1', name: '  Çağrı   Şen ' },
+      { id: 'player-1', name: 'Different name, same ID' },
+      { id: 'player-2', name: 'cagri sen' },
+      { id: 'player-3', name: 'Veli Demir' },
+      { id: 'player-4', name: 'Veli   Demir' },
+      { id: 'player-5', name: 'ISMAIL KAYA' },
+      { id: 'player-6', name: 'ismail kaya' },
+      { id: '', name: '' },
+      { id: '', name: '' },
+    ]
+
+    expect(deduplicatePlayers(players)).toEqual([
+      { id: 'player-1', name: '  Çağrı   Şen ' },
+      { id: 'player-3', name: 'Veli Demir' },
+      { id: 'player-5', name: 'ISMAIL KAYA' },
+      { id: '', name: '' },
+      { id: '', name: '' },
+    ])
   })
 
   it('creates four real visitor test credentials with Visitor role and known passwords', () => {

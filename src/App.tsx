@@ -32,6 +32,7 @@ import {
   canManageMatchControls,
   canRegisterTeamToTournament,
   createTournamentDraft,
+  deduplicatePlayers,
   filterSelectablePlayers,
   generateAutoFixtures,
   formatFixtureDateForDisplay,
@@ -384,7 +385,14 @@ function AppShell() {
   const { appState, session, authLoading, logout } = useAppContext()
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([])
   const safeUsers = Array.isArray(appState?.users) ? appState.users : []
-  const safeTeams = Array.isArray(appState?.teams) ? appState.teams : []
+  const safeTeams = useMemo(() => (
+    Array.isArray(appState?.teams)
+      ? appState.teams.map((team) => ({
+          ...team,
+          players: deduplicatePlayers(Array.isArray(team.players) ? team.players : []),
+        }))
+      : []
+  ), [appState?.teams])
   const safeTournaments = Array.isArray(appState?.tournaments) ? appState.tournaments : []
 
   useEffect(() => {
@@ -1705,6 +1713,7 @@ function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeleteP
   onClose: () => void
 }) {
   const { team } = standing
+  const players = deduplicatePlayers(team.players ?? [])
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
   const [isSavingPlayer, setIsSavingPlayer] = useState(false)
 
@@ -1878,12 +1887,12 @@ function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeleteP
                 Takım kadrosu
               </div>
               <span className="rounded-full border border-slate-700 bg-slate-950/60 px-2.5 py-1 text-xs font-semibold text-slate-300">
-                {(team.players ?? []).length} oyuncu
+                {players.length} oyuncu
               </span>
             </div>
-            {(team.players ?? []).length > 0 ? (
+            {players.length > 0 ? (
               <div className="grid gap-2 sm:grid-cols-2">
-                {(team.players ?? []).map((player) => (
+                {players.map((player) => (
                   <div key={player.id} className="flex min-w-0 items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
                     {player.photoUrl ? (
                       <img src={player.photoUrl} alt="" className="h-10 w-10 shrink-0 rounded-full border border-slate-700 object-cover" />
@@ -4424,9 +4433,12 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     : isAdmin
       ? safeTeams
       : safeTeams.filter((team) => team.managerId === currentUser.id || team.id === currentUser.teamId)
-  const teamsInPlayerList = selectedRosterTeamId
+  const teamsInPlayerList = (selectedRosterTeamId
     ? managedTeamsForCurrentUser.filter((team) => team.id === selectedRosterTeamId)
-    : managedTeamsForCurrentUser
+    : managedTeamsForCurrentUser).map((team) => ({
+      ...team,
+      players: deduplicatePlayers(team.players ?? []),
+    }))
 
   const handleAddPlayer = async () => {
     if (!currentUser) return

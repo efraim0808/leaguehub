@@ -5,6 +5,7 @@ import {
   buildMatchStatistics,
   buildUniqueAuthEmail,
   canRegisterTeamToTournament,
+  deduplicatePlayers,
   normalizeFixtureDate,
   normalizeRoleKey,
   sanitizeDisciplinePatch,
@@ -504,7 +505,7 @@ const mapTeamRow = (row: any, players: Player[] = []): Team => ({
   managerId: row.manager_id ?? '',
   tournamentId: row.tournament_id ?? row.tournamentId ?? undefined,
   logoUrl: row.logo_url ?? row.logoUrl ?? undefined,
-  players,
+  players: deduplicatePlayers(players),
 })
 
 const mapTournamentRow = (row: any, fixtures: Fixture[]): Tournament => {
@@ -2052,15 +2053,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       throw new Error('Bu işlem için yönetici yetkisi gereklidir.')
     }
 
-    const { data, error } = await supabase
+    const { count, error } = await supabase
       .from('players')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('id', playerId)
-      .select('id')
-      .single()
 
     if (error) throw error
-    if (!data) throw new Error('Oyuncu bulunamadı veya silme yetkiniz yok.')
+    if (count === 0) throw new Error('Oyuncu bulunamadı veya silme yetkiniz yok.')
 
     await refreshData()
   }

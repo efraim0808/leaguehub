@@ -31,6 +31,27 @@ export const createPermissionSet = (overrides: Partial<PermissionSet> = {}): Per
   ...overrides,
 })
 
+export const deduplicatePlayers = <T extends Pick<Player, 'id' | 'name'>>(players: T[]): T[] => {
+  const seenIds = new Set<string>()
+  const seenNames = new Set<string>()
+
+  return players.filter((player) => {
+    const id = String(player.id ?? '').trim()
+    const nameKey = String(player.name ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+      .toLocaleLowerCase('tr-TR')
+      .replace(/ı/g, 'i')
+
+    if ((id && seenIds.has(id)) || (nameKey && seenNames.has(nameKey))) return false
+    if (id) seenIds.add(id)
+    if (nameKey) seenNames.add(nameKey)
+    return true
+  })
+}
+
 export const normalizeRoleKey = (role?: string | null): string =>
   (role ?? '')
     .trim()
