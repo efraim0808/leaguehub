@@ -2280,10 +2280,12 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
         homeResult.won += 1
         awayResult.lost += 1
         homeResult.pts += tournament?.scoring?.win ?? 3
+        awayResult.pts += tournament?.scoring?.loss ?? 0
       } else if (homeGoals < awayGoals) {
         awayResult.won += 1
         homeResult.lost += 1
         awayResult.pts += tournament?.scoring?.win ?? 3
+        homeResult.pts += tournament?.scoring?.loss ?? 0
       } else {
         homeResult.draw += 1
         awayResult.draw += 1

@@ -508,7 +508,7 @@ const mapTeamRow = (row: any, players: Player[] = []): Team => ({
   players: deduplicatePlayers(players),
 })
 
-const mapTournamentRow = (row: any, fixtures: Fixture[]): Tournament => {
+export const mapTournamentRow = (row: any, fixtures: Fixture[]): Tournament => {
   const scoringValue = row.points_config ?? row.scoring ?? { win: 3, draw: 1, loss: 0 }
 
   return {
@@ -519,7 +519,7 @@ const mapTournamentRow = (row: any, fixtures: Fixture[]): Tournament => {
     scoring: {
       win: Number(scoringValue?.win ?? row.win_points ?? 3),
       draw: Number(scoringValue?.draw ?? row.draw_points ?? 1),
-      loss: Number(scoringValue?.loss ?? row.loss_points ?? 0),
+      loss: Number(row.points_config?.loss ?? row.scoring?.loss ?? row.loss_points ?? 0),
     },
     rules: typeof row.rules === 'string' ? row.rules : '',
     yellowCardRule: Number(row.yellow_card_rule ?? row.yellow_card_limit ?? row.yellowCardRule ?? 2),

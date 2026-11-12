@@ -46,6 +46,7 @@ import {
   buildDisciplineRecordWritePayload,
   mapFixtureRow,
   mapMatchRow,
+  mapTournamentRow,
   sanitizeAnnouncementPayload,
   sanitizeDisciplinePatch,
   sanitizeDisciplineRecordPayload,
@@ -1500,6 +1501,35 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(standings[0].pts).toBe(7)
     expect(standings[1].pts).toBe(2)
     expect(standings[0].name).toBe(homeTeam.name)
+  })
+
+  it('keeps negative loss points and sorts standings by the calculated total', () => {
+    const teams = createSeedTeams().slice(0, 3)
+    const standings = buildStandings(
+      teams,
+      [
+        { teamId: teams[0].id, played: 2, won: 0, draw: 0, lost: 2, gf: 0, ga: 4 },
+        { teamId: teams[1].id, played: 1, won: 0, draw: 0, lost: 1, gf: 0, ga: 2 },
+        { teamId: teams[2].id, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0 },
+      ],
+      { win: 3, draw: 1, loss: -1 },
+    )
+
+    expect(standings.map((row) => row.pts)).toEqual([0, -1, -2])
+    expect(standings[1].teamId).toBe(teams[1].id)
+    expect(standings[2].teamId).toBe(teams[0].id)
+  })
+
+  it('maps loss points from JSON scoring or the dedicated database column', () => {
+    const baseRow = {
+      id: 'tournament-scoring',
+      status: 'Turnuva Başladı',
+      start_date: '2025-01-01',
+      teams: [],
+    }
+
+    expect(mapTournamentRow({ ...baseRow, points_config: { win: 3, draw: 1 }, scoring: { win: 3, draw: 1, loss: -2 }, loss_points: -1 }, []).scoring.loss).toBe(-2)
+    expect(mapTournamentRow({ ...baseRow, points_config: { win: 3, draw: 1 }, loss_points: -1 }, []).scoring.loss).toBe(-1)
   })
 
   it('applies permission and storage/session checks correctly', () => {
