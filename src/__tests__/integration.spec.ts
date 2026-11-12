@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   FULL_WEEK_DAYS,
+  applyCompletedMatchSuspensions,
   approveTeamManagerRequest,
   applyMatchEvent,
   authenticateUser,
   buildDisciplineRows,
+  calculatePlayerPerformance,
   buildMatchStatistics,
   buildStandings,
   canManageMatchControls,
@@ -36,6 +38,7 @@ import {
   normalizeFixtureDate,
   normalizeUsername,
   registerTeamForTournament,
+  resolveDisciplineTotals,
   removeTeamById,
   removeTournamentById,
   restoreSession,
@@ -408,14 +411,15 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(payload).toMatchObject({
       id: 'not-a-uuid',
       player_id: 'player-1',
-      team_id: 'team-1',
       tournament_id: '44444444-4444-4444-8444-444444444444',
-      match_id: 'match-1',
       yellow_cards: 2,
       red_cards: 1,
       suspension_matches: 3,
-      description: 'Geçici test kaydı',
+      reason: 'Geçici test kaydı',
     })
+    expect(payload).not.toHaveProperty('team_id')
+    expect(payload).not.toHaveProperty('match_id')
+    expect(payload).not.toHaveProperty('description')
     expect(payload).not.toHaveProperty('card_type')
     expect(payload).not.toHaveProperty('match_suspension_count')
     expect(payload).not.toHaveProperty('is_suspended')
@@ -1402,6 +1406,7 @@ describe('LeagueHub – full integration scenarios', () => {
         { id: 'e1', type: 'goal' as const, minute: 12, teamId: 'team-galatasaray', playerId: 'player-home-1', description: 'Gol' },
         { id: 'e2', type: 'goal' as const, minute: 40, teamId: 'team-fenerbahce', playerId: 'player-away-1', description: 'Gol' },
         { id: 'e3', type: 'goal' as const, minute: 66, teamId: 'team-galatasaray', playerId: 'player-home-2', description: 'Gol' },
+        { id: 'e6', type: 'assist' as const, minute: 66, teamId: 'team-galatasaray', playerId: 'player-home-1', description: 'Asist' },
         { id: 'e4', type: 'yellow' as const, minute: 75, teamId: 'team-fenerbahce', playerId: 'player-away-2', description: 'Sarı' },
         { id: 'e5', type: 'red' as const, minute: 88, teamId: 'team-galatasaray', playerId: 'player-home-3', description: 'Kırmızı' },
       ],
@@ -1415,7 +1420,75 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(stats.find((stat) => stat.playerId === 'player-away-1')?.goals).toBe(1)
     expect(stats.find((stat) => stat.playerId === 'player-away-2')?.yellowCards).toBe(1)
     expect(stats.find((stat) => stat.playerId === 'player-home-3')?.redCards).toBe(1)
+    expect(stats.find((stat) => stat.playerId === 'player-home-1')?.assists).toBe(1)
     expect(stats.every((stat) => stat.tournamentId === 'tour-1' && stat.matchId === 'match-stat-1')).toBe(true)
+  })
+
+  it('applies the configured yellow-card threshold and gives red cards a one-match ban', () => {
+    const resolve = (yellowCards: number, redCards = 0, currentYellowCards = 0, currentSuspensionMatches = 0) =>
+      resolveDisciplineTotals({
+        currentYellowCards,
+        currentRedCards: 0,
+        currentSuspensionMatches,
+        yellowCards,
+        redCards,
+        yellowCardRule: 3,
+      })
+
+    expect(resolve(1).suspensionMatches).toBe(0)
+    expect(resolve(2).isSuspended).toBe(false)
+    expect(resolve(3).suspensionMatches).toBe(1)
+    expect(resolve(6, 0, 3, 1).suspensionMatches).toBe(2)
+    expect(resolve(0, 1).suspensionMatches).toBe(1)
+  })
+
+  it('keeps players with fewer than three yellows active and does not serve a new match ban immediately', () => {
+    const team = {
+      id: 'team-discipline',
+      name: 'Takım',
+      shortName: 'T',
+      city: 'İzmir',
+      status: 'Onaylı' as const,
+      managerId: 'manager-1',
+      players: [
+        { id: 'yellow-two', name: 'İki Sarı', unit: '', phone: '', tc: '', yellowCards: 2, redCards: 0, suspensionMatches: 0, isSuspended: true, isCaptain: false },
+        { id: 'new-ban', name: 'Yeni Ceza', unit: '', phone: '', tc: '', yellowCards: 3, redCards: 0, suspensionMatches: 1, isSuspended: true, isCaptain: false },
+      ],
+    }
+
+    const rows = buildDisciplineRows([team], [], [], 3)
+    const completed = applyCompletedMatchSuspensions([team], new Set(['new-ban']))
+
+    expect(rows.find((row) => row.player.id === 'yellow-two')?.isSuspended).toBe(false)
+    expect(rows.find((row) => row.player.id === 'yellow-two')?.suspensionMatches).toBe(0)
+    expect(completed[0].players.find((player) => player.id === 'new-ban')?.suspensionMatches).toBe(1)
+  })
+
+  it('calculates player performance from completed match events and results', () => {
+    const player = { id: 'player-1', yellowCards: 1, redCards: 0, suspensionMatches: 0, isSuspended: false }
+    const performance = calculatePlayerPerformance(player, [{
+      id: 'match-rating',
+      fixtureId: 'fixture-rating',
+      homeTeamId: 'team-1',
+      awayTeamId: 'team-2',
+      homeScore: 2,
+      awayScore: 0,
+      status: 'Bitti',
+      events: [
+        { id: 'rating-goal', type: 'goal', minute: 10, teamId: 'team-1', playerId: 'player-1', description: 'Gol' },
+        { id: 'rating-assist', type: 'assist', minute: 10, teamId: 'team-1', playerId: 'player-1', description: 'Asist' },
+        { id: 'rating-card', type: 'yellow', minute: 55, teamId: 'team-1', playerId: 'player-1', description: 'Sarı kart' },
+      ],
+    }])
+
+    expect(performance).toMatchObject({
+      matchesPlayed: 1,
+      goals: 1,
+      assists: 1,
+      yellowCards: 1,
+      wins: 1,
+      rating: 8.5,
+    })
   })
 
   it('tracks match-ban counts and suspension state in discipline rows', () => {

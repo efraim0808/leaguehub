@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import {
+  Activity,
   BarChart3,
   Bell,
   CalendarDays,
@@ -29,6 +30,7 @@ import {
   DEFAULT_FIXTURE_TIMES,
   FULL_WEEK_DAYS,
   buildDisciplineRows,
+  calculatePlayerPerformance,
   canManageMatchControls,
   canRegisterTeamToTournament,
   createTournamentDraft,
@@ -384,6 +386,7 @@ function App() {
 function AppShell() {
   const { appState, session, authLoading, logout } = useAppContext()
   const [sponsors, setSponsors] = useState<SponsorRecord[]>([])
+  const [selectedPlayer, setSelectedPlayer] = useState<{ player: Player; team: Team } | null>(null)
   const safeUsers = Array.isArray(appState?.users) ? appState.users : []
   const safeTeams = useMemo(() => (
     Array.isArray(appState?.teams)
@@ -467,6 +470,11 @@ function AppShell() {
     ?? fallbackUser
   const activeUserRole = currentUser?.role ?? session.role
   const canAccessLiveMatchControls = canManageMatchControls(activeUserRole)
+  const openPlayerPerformance = (playerId: string) => {
+    const team = safeTeams.find((candidate) => candidate.players.some((player) => player.id === playerId))
+    const player = team?.players.find((candidate) => candidate.id === playerId)
+    if (team && player) setSelectedPlayer({ player, team })
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 pb-28 text-slate-100">
@@ -503,15 +511,25 @@ function AppShell() {
       <main className="mx-auto max-w-6xl px-4 pt-5">
         <Routes>
           <Route path="/" element={<HomePage currentUser={currentUser} safeTournaments={safeTournaments} sponsors={sponsors} />} />
-          <Route path="/standings" element={<StandingsPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} />} />
-          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={['super_admin', 'superadmin'].includes(normalizeRoleKey(activeUserRole))} />} />
+          <Route path="/standings" element={<StandingsPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} onSelectPlayer={openPlayerPerformance} />} />
+          <Route path="/fixtures" element={<FixturesPage safeTeams={safeTeams} safeTournaments={safeTournaments} matches={appState.matches ?? []} onSelectPlayer={openPlayerPerformance} canManageMatchControls={canAccessLiveMatchControls} canManageFixtures={['super_admin', 'superadmin'].includes(normalizeRoleKey(activeUserRole))} />} />
           <Route path="/stats" element={<Navigate to="/standings" replace />} />
-          <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} canManageMatchControls={canAccessLiveMatchControls} />} />
+          <Route path="/live" element={<LiveScorePage safeTeams={safeTeams} appState={appState} onSelectPlayer={openPlayerPerformance} canManageMatchControls={canAccessLiveMatchControls} />} />
           <Route path="/transfer-market" element={<TransferMarketPage currentUser={currentUser} />} />
           <Route path="/gallery" element={<GalleryPage currentUser={currentUser} />} />
           <Route path="/profile" element={<ProfilePage currentUser={currentUser} safeTeams={safeTeams} safeTournaments={safeTournaments} sponsors={sponsors} setSponsors={setSponsors} />} />
         </Routes>
       </main>
+
+      {selectedPlayer ? (
+        <PlayerPerformanceModal
+          player={selectedPlayer.player}
+          team={selectedPlayer.team}
+          matches={appState.matches ?? []}
+          yellowCardRule={safeTournaments.find((item) => item.teams.includes(selectedPlayer.team.id) || item.registeredTeamIds?.includes(selectedPlayer.team.id))?.yellowCardRule ?? 3}
+          onClose={() => setSelectedPlayer(null)}
+        />
+      ) : null}
 
       <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-800 bg-slate-950/90 backdrop-blur-xl">
         <div className="mx-auto grid max-w-6xl grid-cols-3 gap-1 px-1.5 py-1.5 sm:grid-cols-7">
@@ -1701,7 +1719,110 @@ const playerPositionLabels: Record<string, string> = {
   FOR: 'Forvet',
 }
 
-function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeletePlayers, deletingPlayerId, onUpdatePlayer, onDeletePlayer, onClose }: {
+function PlayerPerformanceModal({ player, team, matches, yellowCardRule, onClose }: {
+  player: Player
+  team: Team
+  matches: Match[]
+  yellowCardRule: number
+  onClose: () => void
+}) {
+  const performance = calculatePlayerPerformance(player, matches)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [onClose])
+
+  const statistics = [
+    { label: 'Maç', value: performance.matchesPlayed, tone: 'text-white' },
+    { label: 'Gol', value: performance.goals, tone: 'text-cyan-300' },
+    { label: 'Asist', value: performance.assists, tone: 'text-violet-300' },
+    { label: 'Galibiyet', value: performance.wins, tone: 'text-emerald-300' },
+    { label: 'Sarı kart', value: performance.yellowCards, tone: 'text-amber-300' },
+    { label: 'Kırmızı kart', value: performance.redCards, tone: 'text-rose-300' },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-slate-950/85 p-0 backdrop-blur-md sm:items-center sm:p-4" onClick={onClose}>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="player-performance-title"
+        onClick={(event) => event.stopPropagation()}
+        className="w-full max-w-lg overflow-hidden rounded-t-[30px] border border-slate-700 bg-slate-900 shadow-[0_30px_90px_rgba(15,23,42,0.95)] sm:rounded-[30px]"
+      >
+        <div className="relative overflow-hidden border-b border-slate-800 bg-[radial-gradient(circle_at_top_right,rgba(34,211,238,0.2),transparent_55%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(8,47,73,0.75))] p-5 sm:p-6">
+          <div className="absolute -right-8 -top-10 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+          <div className="relative flex items-start justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-cyan-300/30 bg-slate-950/70 text-xl font-black text-cyan-200">
+                {player.photoUrl ? <img src={player.photoUrl} alt="" className="h-full w-full rounded-2xl object-cover" /> : player.name.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Oyuncu Performans Kartı</div>
+                <h2 id="player-performance-title" className="mt-1 truncate text-xl font-black text-white">{player.name}</h2>
+                <div className="mt-1 truncate text-xs text-slate-300">{team.name}{player.position ? ` · ${playerPositionLabels[player.position] ?? player.position}` : ''}</div>
+              </div>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Oyuncu kartını kapat" className="relative rounded-full border border-slate-600 bg-slate-950/60 p-2 text-slate-300 hover:text-white">
+              <X size={17} />
+            </button>
+          </div>
+          <div className="relative mt-5 flex items-center justify-between rounded-2xl border border-cyan-300/20 bg-slate-950/60 px-4 py-3">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">Performans puanı</div>
+              <div className="mt-1 text-xs text-slate-500">6.0 taban · gol +1.5 · asist +1.0 · galibiyet +0.5</div>
+            </div>
+            <div className="flex items-center gap-2 text-3xl font-black text-amber-300">
+              <Star size={21} fill="currentColor" />
+              {performance.rating.toFixed(1)}
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5 sm:p-6">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {statistics.map((statistic) => (
+              <div key={statistic.label} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <div className={`text-2xl font-black ${statistic.tone}`}>{statistic.value}</div>
+                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-500">{statistic.label}</div>
+              </div>
+            ))}
+          </div>
+          <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${performance.isSuspended ? 'border-rose-500/30 bg-rose-500/10' : 'border-emerald-500/25 bg-emerald-500/5'}`}>
+            <div className="flex items-center gap-2">
+              <Activity size={17} className={performance.isSuspended ? 'text-rose-300' : 'text-emerald-300'} />
+              <div>
+                <div className={`text-sm font-black ${performance.isSuspended ? 'text-rose-200' : 'text-emerald-200'}`}>
+                  {performance.isSuspended ? 'CEZALI' : 'AKTİF'}
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  {performance.suspensionMatches > 0 ? `${performance.suspensionMatches} maç cezası` : `${Math.max(0, yellowCardRule - performance.yellowCards % Math.max(1, yellowCardRule))} sarı kart sonra ceza`}
+                </div>
+              </div>
+            </div>
+            <div className="text-right text-xs text-slate-400">
+              {performance.yellowCards}/{yellowCardRule} sarı
+            </div>
+          </div>
+          <div className="text-center text-[10px] text-slate-500">
+            Reyting: gol +1.5 · asist +1.0 · sarı kart -0.5 · kırmızı kart -2.0 · galibiyet +0.5
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeletePlayers, deletingPlayerId, onUpdatePlayer, onDeletePlayer, onSelectPlayer, onClose }: {
   standing: StandingRow
   teams: Team[]
   matches: Match[]
@@ -1710,6 +1831,7 @@ function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeleteP
   deletingPlayerId: string | null
   onUpdatePlayer: (player: Player) => Promise<void>
   onDeletePlayer: (player: Player) => void
+  onSelectPlayer: (playerId: string) => void
   onClose: () => void
 }) {
   const { team } = standing
@@ -1903,7 +2025,7 @@ function TeamDetailsModal({ standing, teams, matches, canEditPlayers, canDeleteP
                     )}
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="truncate text-sm font-semibold text-white">{player.name}</span>
+                        <button type="button" onClick={() => onSelectPlayer(player.id)} className="truncate text-left text-sm font-semibold text-white hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">{player.name}</button>
                         {player.isCaptain ? <span className="shrink-0 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">Kaptan</span> : null}
                       </div>
                       <div className="mt-1 text-xs text-slate-400">{player.position ? playerPositionLabels[player.position] ?? player.position : 'Mevki belirtilmemiş'}</div>
@@ -2217,7 +2339,7 @@ function FixtureWeekCarousel({
   )
 }
 
-function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches: Match[] }) {
+function StandingsPage({ safeTeams, safeTournaments, matches, onSelectPlayer }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches: Match[]; onSelectPlayer: (playerId: string) => void }) {
   const { appState, session, updatePlayerDiscipline, setAppState, refreshData, updatePlayerInTeam, removePlayerFromTeam } = useAppContext()
   const [activeStandingsTab, setActiveStandingsTab] = useState<LeagueTab>('standings')
   const [selectedFixtureWeek, setSelectedFixtureWeek] = useState('')
@@ -2360,9 +2482,9 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
       }
     }
 
-    const goalMap = new Map<string, { playerName: string; teamName: string; team: Team; value: number }>()
-    const cleanSheetMap = new Map<string, { playerName: string; teamName: string; team: Team; value: number }>()
-    const mvpMap = new Map<string, { playerName: string; teamName: string; team: Team; value: number }>()
+    const goalMap = new Map<string, { playerId: string; playerName: string; teamName: string; team: Team; value: number }>()
+    const cleanSheetMap = new Map<string, { playerId: string; playerName: string; teamName: string; team: Team; value: number }>()
+    const mvpMap = new Map<string, { playerId: string; playerName: string; teamName: string; team: Team; value: number }>()
 
     for (const match of completedMatches) {
       for (const event of match.events ?? []) {
@@ -2373,6 +2495,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
 
         if (event.type === 'goal') {
           const current = goalMap.get(event.playerId) ?? {
+            playerId: event.playerId,
             playerName: person.player.name,
             teamName: person.team.name,
             team: person.team,
@@ -2387,6 +2510,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
         const person = playerTeamMap.get(match.mvpPlayerId)
         if (person) {
           const current = mvpMap.get(match.mvpPlayerId) ?? {
+            playerId: match.mvpPlayerId,
             playerName: person.player.name,
             teamName: person.team.name,
             team: person.team,
@@ -2404,6 +2528,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
         for (const player of homeTeam.players ?? []) {
           if (player.position === 'KL') {
             const current = cleanSheetMap.get(player.id) ?? {
+              playerId: player.id,
               playerName: player.name,
               teamName: homeTeam.name,
               team: homeTeam,
@@ -2419,6 +2544,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
         for (const player of awayTeam.players ?? []) {
           if (player.position === 'KL') {
             const current = cleanSheetMap.get(player.id) ?? {
+              playerId: player.id,
               playerName: player.name,
               teamName: awayTeam.name,
               team: awayTeam,
@@ -2500,14 +2626,16 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
     [visibleDisciplineRecords],
   )
 
-  const disciplineRows = useMemo(() => buildDisciplineRows(safeTeams, matches, normalizedDisciplineRecords), [safeTeams, matches, normalizedDisciplineRecords])
+  const disciplineRows = useMemo(() => buildDisciplineRows(safeTeams, matches, normalizedDisciplineRecords, tournament?.yellowCardRule ?? 3), [safeTeams, matches, normalizedDisciplineRecords, tournament])
 
   const openDisciplineEditor = (teamId: string, playerId: string) => {
     const team = safeTeams.find((candidate) => candidate.id === teamId)
     const player = team?.players.find((candidate) => candidate.id === playerId)
     if (!team || !player) return
 
-    const record = (appState.disciplineRecords ?? []).find((entry) => entry.playerId === playerId && entry.teamId === teamId)
+    const record = (appState.disciplineRecords ?? []).find((entry) =>
+      entry.playerId === playerId && (!entry.teamId || entry.teamId === teamId),
+    )
 
     setDisciplineDraft({
       teamId: team.id,
@@ -2543,47 +2671,51 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
       }, 2000)
     } catch (error) {
       console.error('Kayıt Hatası:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Disiplin kaydı kaydedilemedi: ${message}`)
     }
   }
 
   const handleDelete = async (record: any) => {
-    const teamId = record?.team_id ?? record?.teamId ?? null
+    const recordId = record?.id ?? record?.uuid ?? record?._id ?? record?.record_id ?? null
     const playerId = record?.player_id ?? record?.playerId ?? null
 
-    console.log('[LeagueHub] Kesin imha tetiklendi:', { teamId, playerId, record })
-
-    if (teamId && playerId) {
-      const { error } = await supabase
-        .from('discipline_records')
-        .delete()
-        .eq('team_id', teamId)
-        .eq('player_id', playerId)
-
-      if (error) {
-        console.error('[LeagueHub] Supabase silme hatası:', error)
-      }
+    if (!isValidUuid(recordId) || !playerId) {
+      window.alert('Disiplin kaydı veya oyuncu kimliği geçersiz; kayıt silinemedi.')
+      return
     }
 
-    setAppState((prevState) => {
-      const currentList = prevState.disciplineRecords || []
+    const { error: playerError } = await supabase
+      .from('players')
+      .update({ yellow_cards: 0, red_cards: 0, is_suspended: false })
+      .eq('id', playerId)
+    if (playerError) {
+      console.error('[LeagueHub] Oyuncu kart sıfırlama hatası:', playerError)
+      window.alert(`Oyuncu kartları sıfırlanamadı: ${playerError.message}`)
+      return
+    }
 
-      const updatedList = currentList.filter((item: any) => {
-        if (teamId && playerId && item?.team_id === teamId && item?.player_id === playerId) {
-          return false
-        }
+    const { error } = await supabase
+      .from('discipline_records')
+      .delete()
+      .eq('id', recordId)
 
-        if (item === record) {
-          return false
-        }
+    if (error) {
+      console.error('[LeagueHub] Supabase silme hatası:', error)
+      window.alert(`Disiplin kaydı silinemedi: ${error.message}`)
+      return
+    }
 
-        return true
-      })
-
-      return {
-        ...prevState,
-        disciplineRecords: updatedList,
-      }
-    })
+    setAppState((prevState) => ({
+      ...prevState,
+      teams: prevState.teams.map((team) => ({
+        ...team,
+        players: team.players.map((player) => player.id === playerId
+          ? { ...player, yellowCards: 0, redCards: 0, suspensionMatches: 0, isSuspended: false }
+          : player),
+      })),
+      disciplineRecords: (prevState.disciplineRecords ?? []).filter((item) => item.id !== recordId),
+    }))
   }
 
   return (
@@ -2676,6 +2808,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
               deletingPlayerId={deletingPlayerId}
               onUpdatePlayer={(player) => updatePlayerInTeam(selectedStanding.team.id, player)}
               onDeletePlayer={(player) => void handleRemoveTeamPlayer(player)}
+              onSelectPlayer={onSelectPlayer}
               onClose={() => setSelectedTeamId(null)}
             />
           : null
@@ -2876,14 +3009,15 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
                   </thead>
                   <tbody>
                     {disciplineRows.map(({ team, player, suspensionMatches }) => {
-                      const matchingRecord = (appState.disciplineRecords ?? []).find((record) => record.playerId === player.id && record.teamId === team.id)
-                      const recordId = matchingRecord?.id ?? (matchingRecord as any)?.uuid ?? (matchingRecord as any)?._id ?? (matchingRecord as any)?.record_id ?? null
+                      const matchingRecord = (appState.disciplineRecords ?? []).find((record) =>
+                        record.playerId === player.id && (!record.teamId || record.teamId === team.id),
+                      )
 
                       return (
                         <tr key={`${team.id}-${player.id}`} className="border-t border-slate-800 bg-slate-900/50">
                           <td className="px-3 py-3 font-semibold text-white">{team.name}</td>
                           <td className="px-3 py-3">
-                            <div className="font-medium text-slate-100">{player.name}</div>
+                            <button type="button" onClick={() => onSelectPlayer(player.id)} className="text-left font-medium text-slate-100 hover:text-cyan-200">{player.name}</button>
                             {player.position ? <div className="text-[10px] uppercase tracking-[0.12em] text-slate-400">{player.position}</div> : null}
                           </td>
                           <td className="px-3 py-3 text-center text-yellow-300">{player.yellowCards}</td>
@@ -2901,7 +3035,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
                               <button type="button" onClick={() => openDisciplineEditor(team.id, player.id)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-200" aria-label="Cezayı düzenle">
                                 <PencilLine size={14} />
                               </button>
-                              <button type="button" onClick={() => void handleDelete(matchingRecord ?? { id: recordId, team_id: team.id, player_id: player.id, teamId: team.id, playerId: player.id })} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-200" aria-label="Cezayı sil">
+                              <button type="button" onClick={() => void handleDelete(matchingRecord)} disabled={!matchingRecord} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-200 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Cezayı sil">
                                 <Trash2 size={14} />
                               </button>
                             </div>
@@ -2967,7 +3101,7 @@ function StandingsPage({ safeTeams, safeTournaments, matches }: { safeTeams: Tea
                   <div className="flex min-w-0 items-center gap-2.5">
                     <TeamLogo team={row.team} size={22} />
                     <div className="min-w-0">
-                      <div className="truncate text-xs font-bold text-white">{row.playerName}</div>
+                      <button type="button" onClick={() => onSelectPlayer(row.playerId)} className="truncate text-left text-xs font-bold text-white hover:text-cyan-200">{row.playerName}</button>
                       <div className="truncate text-[10px] text-slate-400">{row.teamName}</div>
                     </div>
                   </div>
@@ -3044,7 +3178,7 @@ export const sortMatchesChronologically = (items: Match[]) => {
   return [...items].sort((left, right) => getMatchTimestamp(left) - getMatchTimestamp(right))
 }
 
-function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatchControls = false, canManageFixtures = false }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches?: Match[]; canManageMatchControls?: boolean; canManageFixtures?: boolean }) {
+function FixturesPage({ safeTeams, safeTournaments, matches = [], onSelectPlayer, canManageMatchControls = false, canManageFixtures = false }: { safeTeams: Team[]; safeTournaments: Tournament[]; matches?: Match[]; onSelectPlayer: (playerId: string) => void; canManageMatchControls?: boolean; canManageFixtures?: boolean }) {
   const { appState, updateMatchState, createFixture, updateFixture, deleteFixture } = useAppContext()
   const [selectedWeek, setSelectedWeek] = useState('')
   const [directMatches, setDirectMatches] = useState<Match[]>([])
@@ -3151,7 +3285,7 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
           minute: resolved.minute,
           teamId: resolved.teamId ?? null,
           playerId: resolved.playerId ?? null,
-          description: resolved.description.trim() || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
+          description: resolved.description.trim() || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'assist' ? 'Asist' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
         } satisfies MatchEvent,
       ],
     }
@@ -3164,7 +3298,14 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
       }
     }
 
-    await updateMatchState(nextMatch)
+    try {
+      await updateMatchState(nextMatch)
+    } catch (error) {
+      console.error('Fixture match event save failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Maç olayı kaydedilemedi: ${message}`)
+      return
+    }
     setEventDraft({ teamId: match.homeTeamId, playerId: fallbackTeam?.players?.[0]?.id ?? '', minute: 0, type: 'goal', description: '' })
   }
 
@@ -3172,7 +3313,13 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
     if (!canManageMatchControls) return
 
     const nextMatch = { ...match, events: (match.events ?? []).filter((event) => event.id !== eventId) }
-    await updateMatchState(nextMatch)
+    try {
+      await updateMatchState(nextMatch)
+    } catch (error) {
+      console.error('Fixture match event removal failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Maç olayı silinemedi: ${message}`)
+    }
   }
 
   const openNewFixtureEditor = () => {
@@ -3371,7 +3518,10 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
                   <div key={event.id} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 px-3 py-2">
                     <div>
                       <div className="text-sm font-semibold text-white">{event.description}</div>
-                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">{getPlayerNameById(event.playerId)} • {event.type} • {event.minute}'</div>
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-400">
+                        {event.playerId ? <button type="button" onClick={() => onSelectPlayer(event.playerId!)} className="normal-case tracking-normal text-cyan-200 hover:text-cyan-100">{getPlayerNameById(event.playerId)}</button> : getPlayerNameById(event.playerId)}
+                        {' • '}{event.type === 'assist' ? 'asist' : event.type} • {event.minute}'
+                      </div>
                     </div>
                     {canManageMatchControls ? (
                       <button
@@ -3403,6 +3553,7 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
                   </select>
                   <select value={eventDraft.type} onChange={(event) => setEventDraft((current) => ({ ...current, type: event.target.value as MatchEvent['type'] }))} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
                     <option value="goal">Gol</option>
+                     <option value="assist">Asist</option>
                     <option value="yellow">Sarı Kart</option>
                     <option value="red">Kırmızı Kart</option>
                     <option value="substitution">Oyuncu Değişikliği</option>
@@ -3429,9 +3580,9 @@ function FixturesPage({ safeTeams, safeTournaments, matches = [], canManageMatch
   )
 }
 
-function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTeams: Team[]; appState: AppState; canManageMatchControls: boolean }) {
+function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchControls }: { safeTeams: Team[]; appState: AppState; onSelectPlayer: (playerId: string) => void; canManageMatchControls: boolean }) {
   const { updateMatchState } = useAppContext()
-  const [eventDraft, setEventDraft] = useState<{ matchId: string; teamId: string; playerId: string; minute: number; type: 'goal' | 'yellow' | 'red' | 'substitution'; description: string; mvpPlayerId: string }>({
+  const [eventDraft, setEventDraft] = useState<{ matchId: string; teamId: string; playerId: string; minute: number; type: MatchEvent['type']; description: string; mvpPlayerId: string }>({
     matchId: '',
     teamId: '',
     playerId: '',
@@ -3596,7 +3747,7 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
       minute: resolved.minute,
       teamId: resolved.teamId ?? null,
       playerId: resolved.playerId ?? null,
-      description: resolved.description || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
+      description: resolved.description || `${resolved.type === 'goal' ? 'Gol' : resolved.type === 'assist' ? 'Asist' : resolved.type === 'yellow' ? 'Sarı kart' : resolved.type === 'red' ? 'Kırmızı kart' : 'Oyuncu değişikliği'}`,
     }
     const nextMatch = { ...match, events: [...match.events, event] }
     if (resolved.type === 'goal') {
@@ -3606,8 +3757,14 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
         nextMatch.awayScore = match.awayScore + 1
       }
     }
-    await saveMatch(nextMatch)
-    setEventDraft({ matchId: '', teamId: '', playerId: '', minute: 0, type: 'goal', description: '', mvpPlayerId: '' })
+    try {
+      await saveMatch(nextMatch)
+      setEventDraft({ matchId: '', teamId: '', playerId: '', minute: 0, type: 'goal', description: '', mvpPlayerId: '' })
+    } catch (error) {
+      console.error('Match event save failed:', error)
+      const message = error instanceof Error ? error.message : 'Bilinmeyen hata'
+      window.alert(`Maç olayı kaydedilemedi: ${message}`)
+    }
   }
 
   const formatDate = (value: string | null | undefined) => {
@@ -3685,6 +3842,7 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
   const getEventTypeLabel = (type: MatchEvent['type']) => {
     switch (type) {
       case 'goal': return 'Gol'
+      case 'assist': return 'Asist'
       case 'yellow': return 'Sarı Kart'
       case 'red': return 'Kırmızı Kart'
       case 'substitution': return 'Değişiklik'
@@ -3797,6 +3955,7 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
               <div className="grid gap-2 md:grid-cols-2">
                 <select value={eventDraft.type} onChange={(event) => setEventDraft({ ...eventDraft, type: event.target.value as MatchEvent['type'] })} className="rounded-xl border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
                   <option value="goal">Gol</option>
+                  <option value="assist">Asist</option>
                   <option value="yellow">Sarı Kart</option>
                   <option value="red">Kırmızı Kart</option>
                   <option value="substitution">Oyuncu Değişikliği</option>
@@ -3844,9 +4003,9 @@ function LiveScorePage({ safeTeams, appState, canManageMatchControls }: { safeTe
                   <span className="inline-flex shrink-0 rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-200">
                     {getEventTypeLabel(event.type)}
                   </span>
-                  <span className="min-w-0 truncate text-[12px] font-medium text-slate-100" title={getPlayerNameById(event.playerId)}>
+                  <button type="button" onClick={() => event.playerId && onSelectPlayer(event.playerId)} className="min-w-0 truncate text-left text-[12px] font-medium text-slate-100 hover:text-cyan-200" title={getPlayerNameById(event.playerId)}>
                     {getPlayerNameById(event.playerId)}
-                  </span>
+                  </button>
                   <span className="shrink-0 text-[11px] font-semibold text-cyan-300">{event.minute}'</span>
                   {canManageMatchControls ? (
                     <button
@@ -4181,7 +4340,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
     status: 'Kayıt Açık' as Tournament['status'],
     rules: '',
     scoring: { win: 3, draw: 1, loss: 0 },
-    yellowCardRule: 2,
+    yellowCardRule: 3,
   })
   const [announcementForm, setAnnouncementForm] = useState({ title: '', body: '' })
   const [isSubmittingAnnouncement, setIsSubmittingAnnouncement] = useState(false)
@@ -4301,7 +4460,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
           loss: Number(newTournament.scoring.loss) || 0,
         },
         rules: newTournament.rules,
-        yellowCardRule: Number(newTournament.yellowCardRule) || 2,
+        yellowCardRule: Number(newTournament.yellowCardRule) || 3,
         teams: safeTeams.map((team) => team.id),
         fixtures: [],
       })
@@ -4331,8 +4490,8 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
         win_points: winPoints,
         draw_points: drawPoints,
         loss_points: lossPoints,
-        yellow_card_rule: Number(nextTournament.yellowCardRule) || 2,
-        yellow_card_limit: Number(nextTournament.yellowCardRule) || 2,
+        yellow_card_rule: Number(nextTournament.yellowCardRule) || 3,
+        yellow_card_limit: Number(nextTournament.yellowCardRule) || 3,
         registered_team_ids: Array.isArray(nextTournament.registeredTeamIds) && nextTournament.registeredTeamIds.length
           ? nextTournament.registeredTeamIds
           : nextTournament.teams,
@@ -4350,7 +4509,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       }
 
       await refreshData()
-      setNewTournament({ name: '', startDate: '2026-09-15', status: 'Kayıt Açık', rules: '', scoring: { win: 3, draw: 1, loss: 0 }, yellowCardRule: 2 })
+      setNewTournament({ name: '', startDate: '2026-09-15', status: 'Kayıt Açık', rules: '', scoring: { win: 3, draw: 1, loss: 0 }, yellowCardRule: 3 })
       const successMessage = 'Turnuva başarıyla oluşturuldu.'
       setTournamentCreateFeedback({ type: 'success', message: successMessage })
       setGlobalToast({ type: 'success', message: successMessage })
@@ -4377,7 +4536,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
       name: cleanedName,
       rules: tournamentEditor.rules?.trim() ?? '',
       startDate: tournamentEditor.startDate || '2026-09-15',
-      yellowCardRule: Number(tournamentEditor.yellowCardRule) || 2,
+      yellowCardRule: Number(tournamentEditor.yellowCardRule) || 3,
       scoring: {
         win: Number(tournamentEditor.scoring?.win) || 3,
         draw: Number(tournamentEditor.scoring?.draw) || 1,
@@ -6029,7 +6188,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                 </label>
                 <label className="text-sm text-slate-300">
                   Sarı Kart Kuralı
-                  <input type="number" min={0} value={tournamentEditor.yellowCardRule} onChange={(event) => setTournamentEditor({ ...tournamentEditor, yellowCardRule: Number(event.target.value) || 2 })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+                  <input type="number" min={1} value={tournamentEditor.yellowCardRule} onChange={(event) => setTournamentEditor({ ...tournamentEditor, yellowCardRule: Number(event.target.value) || 3 })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
                 </label>
                 <label className="text-sm text-slate-300 md:col-span-2">
                   Kurallar
@@ -6168,7 +6327,7 @@ function ProfilePage({ currentUser, safeTeams, safeTournaments, sponsors, setSpo
                     </label>
                     <label className="text-sm text-slate-300">
                       Sarı Kart Kuralı
-                      <input type="number" min={0} value={newTournament.yellowCardRule} onChange={(event) => setNewTournament({ ...newTournament, yellowCardRule: Number(event.target.value) })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
+                      <input type="number" min={1} value={newTournament.yellowCardRule} onChange={(event) => setNewTournament({ ...newTournament, yellowCardRule: Number(event.target.value) || 3 })} className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-white" />
                     </label>
                   </div>
                   {tournamentCreateFeedback ? (

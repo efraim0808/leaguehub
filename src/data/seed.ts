@@ -162,7 +162,7 @@ export const buildInitialState = (): AppState => ({
       status: 'Turnuva Başladı',
       startDate: '2026-08-25',
       scoring: { win: 3, draw: 1, loss: 0 },
-      yellowCardRule: 2,
+      yellowCardRule: 3,
       teams: ['team-1', 'team-2'],
       fixtures: [
         {
@@ -186,7 +186,7 @@ export const buildInitialState = (): AppState => ({
       status: 'Kayıt Açık',
       startDate: '2026-09-05',
       scoring: { win: 3, draw: 1, loss: 0 },
-      yellowCardRule: 2,
+      yellowCardRule: 3,
       teams: ['team-1'],
       fixtures: [],
     },

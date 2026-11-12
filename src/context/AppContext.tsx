@@ -8,6 +8,7 @@ import {
   deduplicatePlayers,
   normalizeFixtureDate,
   normalizeRoleKey,
+  resolveDisciplineTotals,
   sanitizeDisciplinePatch,
   sanitizeMatchEventPayload,
 } from '../lib/leaguehub-data'
@@ -317,11 +318,16 @@ export const sanitizeDisciplineRecordPayload = (payload: Record<string, unknown>
 export const buildDisciplineRecordWritePayload = (payload: Record<string, unknown>) => {
   const filteredPayload = sanitizeDisciplineRecordPayload(payload)
 
+  if (!filteredPayload.reason && filteredPayload.description) {
+    filteredPayload.reason = filteredPayload.description
+  }
   delete (filteredPayload as Record<string, unknown>).card_type
   delete (filteredPayload as Record<string, unknown>).match_suspension_count
   delete (filteredPayload as Record<string, unknown>).is_suspended
-  delete (filteredPayload as Record<string, unknown>).reason
   delete (filteredPayload as Record<string, unknown>).created_at
+  delete (filteredPayload as Record<string, unknown>).description
+  delete (filteredPayload as Record<string, unknown>).team_id
+  delete (filteredPayload as Record<string, unknown>).match_id
 
   return filteredPayload
 }
@@ -417,6 +423,7 @@ export const sanitizeMatchStatisticsPayload = (payload: Record<string, unknown>)
     'match_id',
     'player_id',
     'goals',
+    'assists',
     'yellow_cards',
     'red_cards',
   ])
@@ -522,7 +529,7 @@ export const mapTournamentRow = (row: any, fixtures: Fixture[]): Tournament => {
       loss: Number(row.points_config?.loss ?? row.scoring?.loss ?? row.loss_points ?? 0),
     },
     rules: typeof row.rules === 'string' ? row.rules : '',
-    yellowCardRule: Number(row.yellow_card_rule ?? row.yellow_card_limit ?? row.yellowCardRule ?? 2),
+    yellowCardRule: Number(row.yellow_card_rule ?? row.yellow_card_limit ?? row.yellowCardRule ?? 3),
     teams: Array.isArray(row.teams) ? row.teams : [],
     registeredTeamIds: Array.isArray(row.registered_team_ids)
       ? row.registered_team_ids
@@ -711,7 +718,7 @@ const applyDisciplineRecordsToPlayers = (teams: Team[], records: any[] = []): Te
       yellowCards: nextYellow,
       redCards: nextRed,
       suspensionMatches: nextSuspensionMatches,
-      isSuspended: Boolean(record.is_suspended ?? record.isSuspended ?? (nextRed > 0 || nextYellow >= 2 || nextSuspensionMatches > 0)),
+      isSuspended: nextSuspensionMatches > 0,
     })
   }
 
@@ -719,7 +726,13 @@ const applyDisciplineRecordsToPlayers = (teams: Team[], records: any[] = []): Te
     ...team,
     players: (team.players ?? []).map((player) => {
       const discipline = byPlayer.get(player.id)
-      if (!discipline) return player
+      if (!discipline) {
+        return {
+          ...player,
+          isSuspended: Number(player.suspensionMatches ?? 0) > 0
+            || (Boolean(player.isSuspended) && (player.redCards > 0 || player.yellowCards >= 3)),
+        }
+      }
       return {
         ...player,
         yellowCards: discipline.yellowCards,
@@ -1457,95 +1470,98 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     await refreshData()
   }
 
+  const writePlayerDiscipline = async (
+    teamId: string,
+    playerId: string,
+    tournamentId: string,
+    totals: { yellowCards: number; redCards: number; suspensionMatches: number; isSuspended: boolean },
+  ) => {
+    if (!teamId || !playerId || !tournamentId) {
+      throw new Error('Disiplin kaydı için takım, oyuncu ve turnuva bilgileri gereklidir.')
+    }
+
+    const existingRecord = (appState.disciplineRecords ?? []).find((record) =>
+      record.playerId === playerId
+      && (!record.teamId || record.teamId === teamId)
+      && (!record.tournamentId || record.tournamentId === tournamentId),
+    )
+    const recordId = existingRecord?.id || crypto.randomUUID()
+    const recordPayload = buildDisciplineRecordWritePayload({
+      id: recordId,
+      player_id: playerId,
+      tournament_id: tournamentId,
+      yellow_cards: totals.yellowCards,
+      red_cards: totals.redCards,
+      suspension_matches: totals.suspensionMatches,
+      reason: totals.redCards > 0
+        ? 'Kırmızı kart'
+        : totals.suspensionMatches > 0
+          ? `${totals.suspensionMatches} maç cezası`
+          : `${totals.yellowCards} sarı kart`,
+    })
+
+    const { error: disciplineError } = await supabase
+      .from('discipline_records')
+      .upsert(recordPayload, { onConflict: 'id' })
+    if (disciplineError) throw disciplineError
+
+    const { error: playerError } = await supabase
+      .from('players')
+      .update({
+        yellow_cards: totals.yellowCards,
+        red_cards: totals.redCards,
+        is_suspended: totals.isSuspended,
+      })
+      .eq('id', playerId)
+    if (playerError) throw playerError
+
+    return {
+      id: recordId,
+      playerId,
+      teamId,
+      tournamentId,
+      cardType: totals.redCards > 0 ? 'kırmızı' as const : totals.suspensionMatches > 0 ? 'maç cezası' as const : 'sarı' as const,
+      reason: recordPayload.reason as string,
+      yellowCards: totals.yellowCards,
+      redCards: totals.redCards,
+      suspensionMatches: totals.suspensionMatches,
+    }
+  }
+
   const updatePlayerDiscipline = async (teamId: string, playerId: string, discipline: { yellowCards: number; redCards: number; suspensionMatches?: number; isSuspended: boolean }) => {
     if (!teamId || !playerId) return
 
-    const normalizedYellow = Number.isFinite(Number(discipline.yellowCards)) ? Math.max(0, Number(discipline.yellowCards)) : 0
-    const normalizedRed = Number.isFinite(Number(discipline.redCards)) ? Math.max(0, Number(discipline.redCards)) : 0
-    const normalizedSuspensionMatches = Number.isFinite(Number(discipline.suspensionMatches ?? 0)) ? Math.max(0, Number(discipline.suspensionMatches ?? 0)) : 0
-    const resolvedSuspended = Boolean(discipline.isSuspended) || normalizedRed > 0 || normalizedYellow >= 2 || normalizedSuspensionMatches > 0
+    const currentPlayer = appState.teams.find((team) => team.id === teamId)?.players.find((player) => player.id === playerId)
+    if (!currentPlayer) throw new Error('Oyuncu kaydı bulunamadı.')
+    const team = appState.teams.find((entry) => entry.id === teamId)
+    const tournament = appState.tournaments.find((entry) =>
+      entry.teams.includes(teamId) || entry.registeredTeamIds?.includes(teamId),
+    ) ?? appState.tournaments.find((entry) => entry.id === team?.tournamentId) ?? appState.tournaments[0]
+    const tournamentId = tournament?.id ?? team?.tournamentId
+    if (!tournamentId) throw new Error('Oyuncunun bağlı olduğu turnuva bulunamadı.')
 
-    const nextTeams = appState.teams.map((team) => {
-      if (team.id !== teamId) return team
-      return {
-        ...team,
-        players: team.players.map((player) => player.id === playerId
-          ? {
-              ...player,
-              yellowCards: normalizedYellow,
-              redCards: normalizedRed,
-              suspensionMatches: normalizedSuspensionMatches,
-              isSuspended: resolvedSuspended,
-            }
-          : player),
-      }
+    const totals = resolveDisciplineTotals({
+      currentYellowCards: currentPlayer.yellowCards,
+      currentRedCards: currentPlayer.redCards,
+      currentSuspensionMatches: currentPlayer.suspensionMatches ?? 0,
+      yellowCards: discipline.yellowCards,
+      redCards: discipline.redCards,
+      suspensionMatches: discipline.suspensionMatches,
+      yellowCardRule: tournament?.yellowCardRule ?? 3,
     })
+    const record = await writePlayerDiscipline(teamId, playerId, tournamentId, totals)
 
-    const tournamentId = appState.tournaments.find((tournament) => tournament.teams.includes(teamId) || tournament.registeredTeamIds?.includes(teamId))?.id ?? appState.tournaments[0]?.id ?? ''
-    const existingRecordId = (appState.disciplineRecords ?? []).find((record) => record.playerId === playerId && record.teamId === teamId)?.id
-
-    if (!existingRecordId) {
-      console.warn('[LeagueHub] Discipline sync skipped: no existing discipline record id found. Automatic record recreation is disabled to prevent deleted rows from returning.')
-
-      const nextState = {
-        ...appState,
-        teams: nextTeams,
-        disciplineRecords: (appState.disciplineRecords ?? []).filter((record) => record.playerId !== playerId || record.teamId !== teamId),
-      }
-      setAppState(nextState)
-      persistLocalFallbackState(nextState)
-      return
-    }
-
-    const recordId = existingRecordId
-    const matchedMatchId = appState.matches.find((match) => match.homeTeamId === teamId || match.awayTeamId === teamId)?.id ?? ''
-
-    const rawRecordPayload = {
-      id: recordId,
-      player_id: playerId,
-      team_id: teamId,
-      tournament_id: tournamentId,
-      match_id: matchedMatchId,
-      yellow_cards: normalizedYellow,
-      red_cards: normalizedRed,
-      suspension_matches: normalizedSuspensionMatches,
-      description: normalizedRed > 0
-        ? 'Kırmızı kart'
-        : normalizedSuspensionMatches > 0
-          ? `${normalizedSuspensionMatches} maç cezası`
-          : `${normalizedYellow} sarı kart`,
-    }
-
-    const recordPayload = buildDisciplineRecordWritePayload(rawRecordPayload)
-    console.log('Gönderilen Payload:', recordPayload)
-
-    const disciplineWriteResult = await supabase.from('discipline_records').update(recordPayload).eq('id', recordId)
-    if (disciplineWriteResult.error) {
-      console.error('Kayıt Hatası:', disciplineWriteResult.error)
-    } else {
-      console.error('Kayıt Başarılı:', disciplineWriteResult.data ?? disciplineWriteResult)
-      await refreshData()
-    }
-
+    const nextTeams = appState.teams.map((team) => team.id !== teamId ? team : ({
+      ...team,
+      players: team.players.map((player) => player.id === playerId ? { ...player, ...totals } : player),
+    }))
     const nextDisciplineRecords = [
-      ...(appState.disciplineRecords ?? []).filter((record) => record.playerId !== playerId || record.teamId !== teamId),
-      {
-        id: recordId,
-        playerId,
-        teamId,
-        tournamentId,
-        cardType: normalizedRed > 0 ? 'kırmızı' : normalizedSuspensionMatches > 0 ? 'maç cezası' : 'sarı',
-        description: normalizedRed > 0 ? 'Kırmızı kart' : normalizedSuspensionMatches > 0 ? `${normalizedSuspensionMatches} maç cezası` : `${normalizedYellow} sarı kart`,
-        yellowCards: normalizedYellow,
-        redCards: normalizedRed,
-        suspensionMatches: normalizedSuspensionMatches,
-      },
+      ...(appState.disciplineRecords ?? []).filter((item) => item.id !== record.id),
+      record,
     ]
-
     const nextState = { ...appState, teams: nextTeams, disciplineRecords: nextDisciplineRecords }
     setAppState(nextState)
     persistLocalFallbackState(nextState)
-
     await refreshData()
   }
 
@@ -1591,7 +1607,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         draw: Number(tournament.scoring?.draw ?? 1),
         loss: Number(tournament.scoring?.loss ?? 0),
       },
-      yellow_card_rule: Number(tournament.yellowCardRule ?? 2),
+      yellow_card_rule: Number(tournament.yellowCardRule ?? 3),
       registered_team_ids: Array.isArray(tournament.registeredTeamIds)
         ? tournament.registeredTeamIds
         : Array.isArray(tournament.teams)
@@ -1721,8 +1737,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       win_points: winPoints,
       draw_points: drawPoints,
       loss_points: lossPoints,
-      yellow_card_limit: Number(tournament.yellowCardRule ?? 2),
-      yellow_card_rule: Number(tournament.yellowCardRule ?? 2),
+      yellow_card_limit: Number(tournament.yellowCardRule ?? 3),
+      yellow_card_rule: Number(tournament.yellowCardRule ?? 3),
       registered_team_ids: tournament.registeredTeamIds ?? tournament.teams ?? [],
       scoring: {
         win: winPoints,
@@ -1835,9 +1851,86 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    const previousMatch = appState.matches.find((entry) => entry.id === match.id)
+    const newlyCompletedMatch = match.status === 'Bitti' && previousMatch?.status !== 'Bitti'
+    const previousCards = new Map<string, { yellow: number; red: number }>()
+    const nextCards = new Map<string, { yellow: number; red: number }>()
+    for (const event of previousMatch?.events ?? []) {
+      if (!event.playerId || !event.teamId) continue
+      const current = previousCards.get(event.playerId) ?? { yellow: 0, red: 0 }
+      if (event.type === 'yellow') current.yellow += 1
+      if (event.type === 'red') current.red += 1
+      previousCards.set(event.playerId, current)
+    }
+    for (const event of match.events) {
+      if (!event.playerId || !event.teamId) continue
+      const current = nextCards.get(event.playerId) ?? { yellow: 0, red: 0 }
+      if (event.type === 'yellow') current.yellow += 1
+      if (event.type === 'red') current.red += 1
+      nextCards.set(event.playerId, current)
+    }
+
+    const tournamentForDiscipline = appState.tournaments.find((entry) =>
+      entry.id === resolvedTournamentId
+      || entry.fixtures.some((fixture) => fixture.id === match.fixtureId),
+    ) ?? appState.tournaments[0]
+    const cardedPlayerIds = new Set([...previousCards.keys(), ...nextCards.keys()])
+    for (const playerId of cardedPlayerIds) {
+      const nextCount = nextCards.get(playerId) ?? { yellow: 0, red: 0 }
+      const previousCount = previousCards.get(playerId) ?? { yellow: 0, red: 0 }
+      const yellowDelta = nextCount.yellow - previousCount.yellow
+      const redDelta = nextCount.red - previousCount.red
+      if (yellowDelta === 0 && redDelta === 0) continue
+
+      const team = appState.teams.find((candidate) => candidate.players.some((player) => player.id === playerId))
+      const player = team?.players.find((candidate) => candidate.id === playerId)
+      if (!team || !player) throw new Error(`Kart olayı oyuncusu bulunamadı: ${playerId}`)
+      const disciplineTournament = tournamentForDiscipline ?? appState.tournaments.find((entry) => entry.id === team.tournamentId)
+      const tournamentId = disciplineTournament?.id ?? resolvedTournamentId
+      if (!tournamentId) throw new Error('Kart kaydı için turnuva bulunamadı.')
+
+      const totals = resolveDisciplineTotals({
+        currentYellowCards: player.yellowCards,
+        currentRedCards: player.redCards,
+        currentSuspensionMatches: player.suspensionMatches ?? 0,
+        yellowCards: player.yellowCards + yellowDelta,
+        redCards: player.redCards + redDelta,
+        yellowCardRule: disciplineTournament?.yellowCardRule ?? 3,
+      })
+      await writePlayerDiscipline(team.id, player.id, tournamentId, totals)
+    }
+
     if (match.status === 'Bitti') {
       const tournament = appState.tournaments.find((entry) => entry.fixtures.some((fixture) => fixture.id === match.fixtureId))
-      const updatedTeams = applyCompletedMatchSuspensions(appState.teams)
+      const cardedPlayerIds = new Set(
+        match.events
+          .filter((event) => event.type === 'yellow' || event.type === 'red')
+          .map((event) => event.playerId)
+          .filter((playerId): playerId is string => Boolean(playerId)),
+      )
+      const updatedTeams = newlyCompletedMatch
+        ? applyCompletedMatchSuspensions(appState.teams, cardedPlayerIds)
+        : appState.teams
+
+      if (newlyCompletedMatch) {
+        for (const team of appState.teams) {
+          for (const player of team.players) {
+            const updatedPlayer = updatedTeams.find((candidate) => candidate.id === team.id)?.players.find((candidate) => candidate.id === player.id)
+            if (!updatedPlayer || Number(updatedPlayer.suspensionMatches ?? 0) === Number(player.suspensionMatches ?? 0)) continue
+            const playerTournament = appState.tournaments.find((entry) =>
+              entry.teams.includes(team.id) || entry.registeredTeamIds?.includes(team.id),
+            ) ?? tournament
+            if (!playerTournament) throw new Error(`Oyuncu cezası için turnuva bulunamadı: ${player.name}`)
+            await writePlayerDiscipline(team.id, player.id, playerTournament.id, {
+              yellowCards: player.yellowCards,
+              redCards: player.redCards,
+              suspensionMatches: updatedPlayer.suspensionMatches ?? 0,
+              isSuspended: updatedPlayer.isSuspended,
+            })
+          }
+        }
+      }
+
       const nextLocalState = { ...appState, teams: updatedTeams }
       setAppState(nextLocalState)
       persistLocalFallbackState(nextLocalState)
@@ -1857,6 +1950,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           match_id: stat.matchId,
           player_id: stat.playerId,
           goals: stat.goals,
+          assists: stat.assists,
           yellow_cards: stat.yellowCards,
           red_cards: stat.redCards,
           created_at: new Date().toISOString(),
@@ -1886,11 +1980,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     await refreshData()
-    if (appState.teams.length > 0) {
-      const completedSuspensionTeams = applyCompletedMatchSuspensions(appState.teams)
-      setAppState((current) => ({ ...current, teams: completedSuspensionTeams }))
-      persistLocalFallbackState({ ...appState, teams: completedSuspensionTeams })
-    }
   }
 
   const createFixture = async (fixture: Fixture) => {

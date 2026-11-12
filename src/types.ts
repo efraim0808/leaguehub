@@ -134,7 +134,7 @@ export interface Fixture {
 
 export interface MatchEvent {
   id: string
-  type: 'goal' | 'yellow' | 'red' | 'substitution'
+  type: 'goal' | 'assist' | 'yellow' | 'red' | 'substitution'
   minute: number
   teamId: string | null
   playerId: string | null

@@ -115,10 +115,12 @@ create table if not exists public.tournaments (
   rules text,
   scoring jsonb not null default '{"win": 3, "draw": 1, "loss": 0}'::jsonb,
   registered_team_ids uuid[] not null default '{}',
-  yellow_card_rule integer not null default 2,
+  yellow_card_rule integer not null default 3,
   teams uuid[] not null default '{}',
   created_at timestamptz not null default now()
 );
+
+alter table public.tournaments alter column yellow_card_rule set default 3;
 
 create table if not exists public.fixtures (
   id uuid primary key default gen_random_uuid(),
@@ -191,6 +193,9 @@ create table if not exists public.player_match_stats (
   substitutions integer not null default 0,
   created_at timestamptz not null default now()
 );
+
+alter table public.match_statistics add column if not exists assists integer not null default 0;
+alter table public.player_match_stats add column if not exists assists integer not null default 0;
 
 create table if not exists public.discipline_records (
   id uuid primary key default gen_random_uuid(),

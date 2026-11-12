@@ -159,9 +159,11 @@ export const decrementSuspensionTimers = <T extends Pick<Player, 'id' | 'isSuspe
     }
   })
 
-export const applyCompletedMatchSuspensions = <T extends Team>(teams: T[]): T[] =>
+export const applyCompletedMatchSuspensions = <T extends Team>(teams: T[], excludedPlayerIds: ReadonlySet<string> = new Set()): T[] =>
   teams.map((team) => {
-    const activeSuspensionPlayers = team.players.filter((player) => Boolean(player.isSuspended) || Number(player.suspensionMatches ?? 0) > 0)
+    const activeSuspensionPlayers = team.players.filter((player) =>
+      !excludedPlayerIds.has(player.id) && (Boolean(player.isSuspended) || Number(player.suspensionMatches ?? 0) > 0),
+    )
     if (activeSuspensionPlayers.length === 0) {
       return team
     }
@@ -169,6 +171,7 @@ export const applyCompletedMatchSuspensions = <T extends Team>(teams: T[]): T[] 
     return {
       ...team,
       players: team.players.map((player) => {
+        if (excludedPlayerIds.has(player.id)) return player
         const currentSuspensionMatches = Math.max(0, Number(player.suspensionMatches ?? 0))
         const hasSuspension = Boolean(player.isSuspended) || currentSuspensionMatches > 0
         if (!hasSuspension) {
@@ -245,7 +248,7 @@ export const registerTeamForTournament = (
     status: tournament.status ?? 'Kayıt Açık',
     startDate: tournament.startDate ?? new Date().toISOString().slice(0, 10),
     scoring: tournament.scoring ?? DEFAULT_TOURNAMENT_SCORING,
-    yellowCardRule: tournament.yellowCardRule ?? 2,
+    yellowCardRule: tournament.yellowCardRule ?? 3,
     teams: tournament.teams ?? [],
     registeredTeamIds: tournament.registeredTeamIds ?? tournament.teams ?? [],
     fixtures: tournament.fixtures ?? [],
@@ -477,7 +480,7 @@ export const createTournamentDraft = (
   startDate: overrides.startDate ?? new Date().toISOString().slice(0, 10),
   scoring: overrides.scoring ?? DEFAULT_TOURNAMENT_SCORING,
   rules: overrides.rules ?? '',
-  yellowCardRule: Number(overrides.yellowCardRule ?? 2),
+  yellowCardRule: Number(overrides.yellowCardRule ?? 3),
   teams: overrides.teams ?? [],
   registeredTeamIds: overrides.registeredTeamIds ?? overrides.teams ?? [],
   fixtures: overrides.fixtures ?? [],
@@ -516,8 +519,8 @@ export const buildTournamentUpdatePayload = (tournament: Tournament) => {
     win_points: winPoints,
     draw_points: drawPoints,
     loss_points: lossPoints,
-    yellow_card_limit: Number(tournament.yellowCardRule ?? 2),
-    yellow_card_rule: Number(tournament.yellowCardRule ?? 2),
+    yellow_card_limit: Number(tournament.yellowCardRule ?? 3),
+    yellow_card_rule: Number(tournament.yellowCardRule ?? 3),
     registered_team_ids: tournament.registeredTeamIds ?? tournament.teams ?? [],
     scoring: {
       win: winPoints,
@@ -855,7 +858,7 @@ export const createSeedTournaments = (): Tournament[] => {
       startDate: '2026-09-02T18:00:00.000Z',
       scoring: { ...DEFAULT_TOURNAMENT_SCORING },
       rules: 'Sportmenlik kuralları uygulanır. Kural dışı davranışlarda disiplin kuruluna bildirilir.',
-      yellowCardRule: 2,
+      yellowCardRule: 3,
       teams: teamIds,
       fixtures: createFixtureCalendar('tourney-1', teamIds),
     },
@@ -866,7 +869,7 @@ export const createSeedTournaments = (): Tournament[] => {
       startDate: '2026-10-10T18:00:00.000Z',
       scoring: { ...DEFAULT_TOURNAMENT_SCORING },
       rules: 'Maç öncesi kadro listesi teslim edilir. Oyuncu değişiklikleri kurallar dahilindedir.',
-      yellowCardRule: 2,
+      yellowCardRule: 3,
       teams: teamIds,
       fixtures: createFixtureCalendar('tourney-2', teamIds),
     },
@@ -949,6 +952,7 @@ export interface MatchStatisticRow {
   playerId: string | null
   playerName: string
   goals: number
+  assists: number
   yellowCards: number
   redCards: number
   substitutions: number
@@ -974,12 +978,14 @@ export const buildMatchStatistics = (
       playerId: event.playerId,
       playerName: playerMap.get(event.playerId)?.name ?? 'Oyuncu',
       goals: 0,
+      assists: 0,
       yellowCards: 0,
       redCards: 0,
       substitutions: 0,
     }
 
     if (event.type === 'goal') existing.goals += 1
+    if (event.type === 'assist') existing.assists += 1
     if (event.type === 'yellow') existing.yellowCards += 1
     if (event.type === 'red') existing.redCards += 1
     if (event.type === 'substitution') existing.substitutions += 1
@@ -994,7 +1000,9 @@ export const buildDisciplineRows = (
   teams: Team[],
   matches: Array<Pick<Match, 'events'>> = [],
   disciplineRecords: Array<{ playerId: string; teamId?: string; yellowCards?: number; redCards?: number; suspensionMatches?: number; cardType?: string; description?: string; isSuspended?: boolean }> = [],
+  yellowCardRule = 3,
 ): Array<{ team: Team; player: Player; yellowCards: number; redCards: number; suspensionMatches: number; isSuspended: boolean }> => {
+  const cardLimit = Math.max(1, Math.floor(Number(yellowCardRule) || 3))
   const disciplineMap = new Map<string, { team: Team; player: Player; yellowCards: number; redCards: number; suspensionMatches: number; isSuspended: boolean }>()
 
   for (const team of teams) {
@@ -1019,12 +1027,9 @@ export const buildDisciplineRows = (
         if (normalizedCardType === 'maç cezası') suspensionMatches = Math.max(suspensionMatches, 1)
       }
 
-      const isSuspended = Boolean(
-        matchingRecords.some((record) => record.isSuspended) ||
-          player.isSuspended ||
-          suspensionMatches > 0 ||
-          redCards > 0 ||
-          yellowCards >= 2,
+      const cardThresholdReached = redCards > 0 || yellowCards >= cardLimit
+      const isSuspended = suspensionMatches > 0 || (
+        cardThresholdReached && Boolean(matchingRecords.some((record) => record.isSuspended) || player.isSuspended)
       )
 
       disciplineMap.set(`${team.id}:${player.id}`, {
@@ -1054,16 +1059,19 @@ export const buildDisciplineRows = (
         isSuspended: false,
       }
 
-      const storedYellowCards = Number(player.yellowCards ?? current.yellowCards ?? 0)
-      const storedRedCards = Number(player.redCards ?? current.redCards ?? 0)
-      const storedSuspensionMatches = Number((player as any).suspensionMatches ?? current.suspensionMatches ?? 0)
+      const storedYellowCards = Math.max(Number(player.yellowCards ?? 0), current.yellowCards)
+      const storedRedCards = Math.max(Number(player.redCards ?? 0), current.redCards)
+      const storedSuspensionMatches = Math.max(Number((player as any).suspensionMatches ?? 0), current.suspensionMatches)
 
-      if (event.type === 'yellow' && storedYellowCards === 0) current.yellowCards += 1
-      if (event.type === 'red' && storedRedCards === 0) current.redCards += 1
+      const hasStoredDiscipline = storedYellowCards > 0 || storedRedCards > 0 || storedSuspensionMatches > 0
+      if (!hasStoredDiscipline && event.type === 'yellow') current.yellowCards += 1
+      if (!hasStoredDiscipline && event.type === 'red') current.redCards += 1
 
-      const eventSuspension = current.redCards > 0 || current.yellowCards >= 2 ? 1 : 0
-      current.suspensionMatches = Math.max(storedSuspensionMatches, eventSuspension)
-      current.isSuspended = Boolean(player.isSuspended) || current.suspensionMatches > 0 || current.redCards > 0 || current.yellowCards >= 2
+      if (!hasStoredDiscipline) {
+        const eventSuspension = Math.floor(current.yellowCards / cardLimit) + (current.redCards > 0 ? 1 : 0)
+        current.suspensionMatches = Math.max(storedSuspensionMatches, eventSuspension)
+      }
+      current.isSuspended = current.suspensionMatches > 0
 
       disciplineMap.set(key, current)
     }
@@ -1076,6 +1084,89 @@ export const buildDisciplineRows = (
       if (teamDiff !== 0) return teamDiff
       return left.player.name.localeCompare(right.player.name)
     })
+}
+
+export const resolveDisciplineTotals = ({
+  currentYellowCards,
+  currentRedCards,
+  currentSuspensionMatches,
+  yellowCards,
+  redCards,
+  suspensionMatches,
+  yellowCardRule = 3,
+}: {
+  currentYellowCards: number
+  currentRedCards: number
+  currentSuspensionMatches: number
+  yellowCards: number
+  redCards: number
+  suspensionMatches?: number
+  yellowCardRule?: number
+}) => {
+  const limit = Math.max(1, Math.floor(Number(yellowCardRule) || 3))
+  const yellowCount = Math.max(0, Math.floor(Number(yellowCards) || 0))
+  const redCount = Math.max(0, Math.floor(Number(redCards) || 0))
+  const newlyEarnedSuspensions =
+    Math.max(0, Math.floor(yellowCount / limit) - Math.floor(Math.max(0, currentYellowCards) / limit))
+    + Math.max(0, redCount - Math.max(0, currentRedCards))
+  const nextSuspensionMatches = Math.max(
+    0,
+    Math.floor(Number(suspensionMatches) || 0),
+    Math.max(0, Math.floor(Number(currentSuspensionMatches) || 0)) + newlyEarnedSuspensions,
+  )
+
+  return {
+    yellowCards: yellowCount,
+    redCards: redCount,
+    suspensionMatches: nextSuspensionMatches,
+    isSuspended: nextSuspensionMatches > 0,
+  }
+}
+
+export const calculatePlayerPerformance = (
+  player: Pick<Player, 'id' | 'yellowCards' | 'redCards' | 'suspensionMatches' | 'isSuspended'>,
+  matches: Match[],
+) => {
+  const playedMatches = matches.filter((match) =>
+    match.status === 'Bitti' && match.events.some((event) => event.playerId === player.id),
+  )
+  let goals = 0
+  let assists = 0
+  let eventYellowCards = 0
+  let eventRedCards = 0
+  let wins = 0
+
+  for (const match of playedMatches) {
+    const playerEvents = match.events.filter((event) => event.playerId === player.id)
+    goals += playerEvents.filter((event) => event.type === 'goal').length
+    assists += playerEvents.filter((event) => event.type === 'assist').length
+    eventYellowCards += playerEvents.filter((event) => event.type === 'yellow').length
+    eventRedCards += playerEvents.filter((event) => event.type === 'red').length
+
+    const playerTeamId = playerEvents.find((event) => event.teamId)?.teamId
+    if (playerTeamId && (
+      (playerTeamId === match.homeTeamId && match.homeScore > match.awayScore)
+      || (playerTeamId === match.awayTeamId && match.awayScore > match.homeScore)
+    )) {
+      wins += 1
+    }
+  }
+
+  const yellowCards = Math.max(Number(player.yellowCards ?? 0), eventYellowCards)
+  const redCards = Math.max(Number(player.redCards ?? 0), eventRedCards)
+  const rating = 6 + goals * 1.5 + assists - yellowCards * 0.5 - redCards * 2 + wins * 0.5
+
+  return {
+    matchesPlayed: playedMatches.length,
+    goals,
+    assists,
+    yellowCards,
+    redCards,
+    wins,
+    suspensionMatches: Number(player.suspensionMatches ?? 0),
+    isSuspended: Boolean(player.isSuspended) || Number(player.suspensionMatches ?? 0) > 0,
+    rating: Math.round(rating * 10) / 10,
+  }
 }
 
 export const buildStandings = (
@@ -1429,7 +1520,7 @@ export const createAdminDemoSeedState = (): AppState => {
       startDate: '2026-09-10T18:00:00.000Z',
       scoring: { ...DEFAULT_TOURNAMENT_SCORING },
       rules: 'Takım temsilcileri maç öncesi konaklama ve ekipman kontrolünü sağlar.',
-      yellowCardRule: 2,
+      yellowCardRule: 3,
       teams: teamIds,
       fixtures: generateAutoFixtures('demo-tour-1', teamIds, ['Salı', 'Perşembe'], ['19:00', '20:00'], 'Merkez Stadyum'),
     },
