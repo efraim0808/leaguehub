@@ -373,6 +373,9 @@ export const sanitizeMatchPayload = (payload: Record<string, unknown>) => {
     'away_score',
     'status',
     'elapsed_minutes',
+    'elapsed_seconds',
+    'current_minute',
+    'started_at',
     'mvp_player_id',
     'week',
     'match_date',
@@ -572,6 +575,9 @@ export const mapMatchRow = (row: any, events: MatchEvent[] = []): Match => {
     status: row.status ?? 'Başlatıldı',
     events,
     elapsedMinutes: Number(row.elapsed_minutes ?? 0),
+    elapsedSeconds: Number(row.elapsed_seconds ?? Number(row.elapsed_minutes ?? 0) * 60),
+    currentMinute: Number(row.current_minute ?? row.currentMinute ?? row.elapsed_minutes ?? 0),
+    startedAt: row.started_at ?? row.startedAt ?? undefined,
     mvpPlayerId: row.mvp_player_id ?? undefined,
     week: row.week ?? undefined,
     matchDate: row.match_date ?? row.fixture_date ?? undefined,
@@ -1797,6 +1803,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const fixtureStatus = match.status === 'Bitti' ? 'Tamamlandı' : match.status === 'Durduruldu' ? 'Devam Ediyor' : 'Planlandı'
 
     const resolvedTournamentId = match.tournamentId ?? appState.tournaments.find((entry) => entry.fixtures.some((fixture) => fixture.id === match.fixtureId))?.id ?? null
+    const rawElapsedSeconds = (match as any).elapsedSeconds ?? (Number(match.elapsedMinutes ?? 0) * 60)
+    const totalSeconds = Math.max(0, Number(rawElapsedSeconds ?? 0))
+    const currentMinute = Math.max(0, Math.floor(totalSeconds / 60))
+    const runningStatus = String(match.status ?? '').trim().toLowerCase()
+    const startedAt = match.startedAt ?? (runningStatus === 'başlatıldı' || runningStatus === 'live' || runningStatus === 'started' ? new Date().toISOString() : null)
 
     const { error: matchError } = await supabase.from('matches').upsert({
       id: match.id,
@@ -1807,7 +1818,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       home_score: match.homeScore,
       away_score: match.awayScore,
       status: match.status,
-      elapsed_minutes: Math.max(0, Math.floor(Number(match.elapsedMinutes ?? 0))),
+      elapsed_minutes: currentMinute,
+      elapsed_seconds: totalSeconds,
+      current_minute: currentMinute,
+      started_at: startedAt,
       mvp_player_id: match.mvpPlayerId ?? null,
       week: match.week ?? null,
       match_date: match.matchDate ? normalizeFixtureDate(match.matchDate) : null,

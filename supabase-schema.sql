@@ -147,6 +147,9 @@ create table if not exists public.matches (
   away_score integer not null default 0,
   status public.match_status not null default 'Başlatıldı',
   elapsed_minutes integer not null default 0,
+  elapsed_seconds integer not null default 0,
+  current_minute integer not null default 0,
+  started_at timestamptz null,
   mvp_player_id uuid null,
   week text,
   match_date date,
@@ -154,6 +157,11 @@ create table if not exists public.matches (
   venue text,
   created_at timestamptz not null default now()
 );
+
+alter table public.matches
+  add column if not exists elapsed_seconds integer not null default 0,
+  add column if not exists current_minute integer not null default 0,
+  add column if not exists started_at timestamptz null;
 
 create table if not exists public.match_events (
   id uuid primary key default gen_random_uuid(),

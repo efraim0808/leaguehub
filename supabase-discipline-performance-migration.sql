@@ -16,3 +16,8 @@ alter table public.player_match_stats
 
 alter table public.tournaments
   alter column yellow_card_rule set default 3;
+
+alter table public.matches
+  add column if not exists elapsed_seconds integer not null default 0,
+  add column if not exists current_minute integer not null default 0,
+  add column if not exists started_at timestamptz null;

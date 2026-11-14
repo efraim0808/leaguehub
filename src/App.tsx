@@ -3641,6 +3641,22 @@ function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchCont
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
   }
 
+  const resolveMatchElapsedSeconds = (match: Match | null | undefined, asOf = Date.now()): number => {
+    if (!match) return 0
+
+    const rawPersistedSeconds = (match as any).elapsedSeconds ?? (Number(match.elapsedMinutes ?? 0) * 60)
+    const persistedSeconds = Math.max(0, Number(rawPersistedSeconds ?? 0))
+    const startedAtRaw = (match as any).startedAt ?? (match as any).started_at
+    const startedAt = typeof startedAtRaw === 'string' ? new Date(startedAtRaw).getTime() : Number.NaN
+    const normalizedStatus = String(match.status ?? '').trim().toLowerCase()
+
+    if ((normalizedStatus === 'başlatıldı' || normalizedStatus === 'live' || normalizedStatus === 'started') && Number.isFinite(startedAt)) {
+      return Math.max(0, persistedSeconds + Math.floor((asOf - startedAt) / 1000))
+    }
+
+    return persistedSeconds
+  }
+
   const getMatchDateTimestamp = (match: Match) => {
     const rawDate = (match.matchDate ?? (match as any).match_date ?? '2999-12-31').toString()
     const value = new Date(rawDate).getTime()
@@ -3694,9 +3710,10 @@ function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchCont
   useEffect(() => {
     if (!selectedMatch) return
 
-    const persistedSeconds = (Number(selectedMatch.elapsedMinutes ?? 0) * 60) || 0
+    const persistedSeconds = resolveMatchElapsedSeconds(selectedMatch)
+    const normalizedStatus = String(selectedMatch.status ?? '').trim().toLowerCase()
     setLiveElapsedSeconds(persistedSeconds)
-    setIsPlaying(selectedMatch.status === 'Başlatıldı')
+    setIsPlaying(normalizedStatus === 'başlatıldı' || normalizedStatus === 'live' || normalizedStatus === 'started')
 
     setEventDraft((current) => {
       if (current.matchId === selectedMatch.id) return current
@@ -3716,20 +3733,7 @@ function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchCont
     if (!selectedMatch || !isPlaying) return
 
     const timerId = window.setInterval(() => {
-      setLiveElapsedSeconds((current) => {
-        const nextSeconds = current + 1
-        const nextMinutes = Math.max(0, Math.floor(nextSeconds / 60))
-        void supabase
-          .from('matches')
-          .update({ elapsed_minutes: nextMinutes })
-          .eq('id', selectedMatch.id)
-          .then(({ error }) => {
-            if (error) {
-              console.warn('[LeagueHub] Live match elapsed sync failed:', error)
-            }
-          })
-        return nextSeconds
-      })
+      setLiveElapsedSeconds((current) => current + 1)
     }, 1000)
 
     return () => window.clearInterval(timerId)
@@ -3741,10 +3745,14 @@ function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchCont
 
   const handleStatusChange = async (match: Match, status: Match['status']) => {
     const isStarting = status === 'Başlatıldı'
+    const totalSeconds = Math.max(0, Math.floor(liveElapsedSeconds))
     const next = {
       ...match,
       status,
-      elapsedMinutes: Math.max(0, Math.floor(liveElapsedSeconds / 60)),
+      elapsedMinutes: Math.max(0, Math.floor(totalSeconds / 60)),
+      elapsedSeconds: totalSeconds,
+      currentMinute: Math.max(0, Math.floor(totalSeconds / 60)),
+      startedAt: isStarting ? new Date().toISOString() : undefined,
     }
 
     setIsPlaying(isStarting)
@@ -3753,10 +3761,14 @@ function LiveScorePage({ safeTeams, appState, onSelectPlayer, canManageMatchCont
 
   const handleFinishMatch = async (match: Match) => {
     try {
+      const totalSeconds = Math.max(0, Math.floor(liveElapsedSeconds))
       const next = {
         ...match,
         status: 'Bitti' as const,
-        elapsedMinutes: Math.max(0, Math.floor(liveElapsedSeconds / 60)),
+        elapsedMinutes: Math.max(0, Math.floor(totalSeconds / 60)),
+        elapsedSeconds: totalSeconds,
+        currentMinute: Math.max(0, Math.floor(totalSeconds / 60)),
+        startedAt: undefined,
       }
 
       setIsPlaying(false)

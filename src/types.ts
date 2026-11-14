@@ -161,6 +161,9 @@ export interface Match {
   status: 'Planlandı' | 'Başlatıldı' | 'Durduruldu' | 'Bitti'
   events: MatchEvent[]
   elapsedMinutes?: number
+  elapsedSeconds?: number
+  currentMinute?: number
+  startedAt?: string
   mvpPlayerId?: string
   week?: string
   matchDate?: string
