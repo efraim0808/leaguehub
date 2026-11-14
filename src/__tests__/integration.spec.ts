@@ -1593,6 +1593,26 @@ describe('LeagueHub – full integration scenarios', () => {
     expect(standings[2].teamId).toBe(teams[0].id)
   })
 
+  it('sorts tied teams by the football priority order, including head-to-head and goal difference', () => {
+    const teams = createSeedTeams().slice(0, 3)
+    const standings = buildStandings(
+      teams,
+      [
+        { teamId: teams[0].id, played: 3, won: 1, draw: 0, lost: 2, gf: 3, ga: 4, pts: 3 },
+        { teamId: teams[1].id, played: 3, won: 1, draw: 0, lost: 2, gf: 3, ga: 4, pts: 3 },
+        { teamId: teams[2].id, played: 3, won: 2, draw: 0, lost: 1, gf: 5, ga: 3, pts: 6 },
+      ],
+      { win: 3, draw: 1, loss: 0 },
+      [
+        { homeTeamId: teams[0].id, awayTeamId: teams[1].id, homeScore: 2, awayScore: 0, status: 'Bitti' },
+        { homeTeamId: teams[0].id, awayTeamId: teams[2].id, homeScore: 1, awayScore: 2, status: 'Bitti' },
+        { homeTeamId: teams[1].id, awayTeamId: teams[2].id, homeScore: 0, awayScore: 3, status: 'Bitti' },
+      ],
+    )
+
+    expect(standings.map((row) => row.teamId)).toEqual([teams[2].id, teams[0].id, teams[1].id])
+  })
+
   it('maps loss points from JSON scoring or the dedicated database column', () => {
     const baseRow = {
       id: 'tournament-scoring',

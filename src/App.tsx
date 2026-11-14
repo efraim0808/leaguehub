@@ -30,6 +30,7 @@ import {
   DEFAULT_FIXTURE_TIMES,
   FULL_WEEK_DAYS,
   buildDisciplineRows,
+  buildStandings,
   calculatePlayerPerformance,
   canManageMatchControls,
   canRegisterTeamToTournament,
@@ -2424,34 +2425,72 @@ function StandingsPage({ safeTeams, safeTournaments, matches, onSelectPlayer }: 
       ...Array.from(resultMap.keys()),
     ])
 
-    return Array.from(allTeamIds)
-      .map((teamId) => {
-        const row = resultMap.get(teamId) ?? { teamId, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, pts: 0 }
-        const team = safeTeams.find((candidate) => candidate.id === teamId) ?? {
-          id: teamId,
-          name: 'Takım',
-          shortName: 'T',
-          city: 'Bilinmiyor',
-          players: [],
-          managerId: '',
-          status: 'Beklemede',
-          tournamentId: tournament?.id ?? '',
-          logoUrl: '',
-        } as Team
+    const standingsRows = Array.from(allTeamIds).map((teamId) => {
+      const row = resultMap.get(teamId) ?? { teamId, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, pts: 0 }
+      const team = safeTeams.find((candidate) => candidate.id === teamId) ?? {
+        id: teamId,
+        name: 'Takım',
+        shortName: 'T',
+        city: 'Bilinmiyor',
+        players: [],
+        managerId: '',
+        status: 'Beklemede',
+        tournamentId: tournament?.id ?? '',
+        logoUrl: '',
+      } as Team
 
-        return {
-          team,
-          played: row.played,
-          won: row.won,
-          draw: row.draw,
-          lost: row.lost,
-          gf: row.gf,
-          ga: row.ga,
-          pts: row.pts,
-          gd: row.gf - row.ga,
-        }
-      })
-      .sort((left, right) => right.pts - left.pts || right.gf - left.gf || left.team.name.localeCompare(right.team.name))
+      return {
+        team,
+        played: row.played,
+        won: row.won,
+        draw: row.draw,
+        lost: row.lost,
+        gf: row.gf,
+        ga: row.ga,
+        pts: row.pts,
+        gd: row.gf - row.ga,
+      }
+    })
+
+    return buildStandings(
+      safeTeams,
+      standingsRows.map((row) => ({
+        teamId: row.team.id,
+        played: row.played,
+        won: row.won,
+        draw: row.draw,
+        lost: row.lost,
+        gf: row.gf,
+        ga: row.ga,
+        pts: row.pts,
+      })),
+      tournament?.scoring ?? { win: 3, draw: 1, loss: 0 },
+      matches,
+    ).map((row) => {
+      const team = safeTeams.find((candidate) => candidate.id === row.teamId) ?? {
+        id: row.teamId,
+        name: 'Takım',
+        shortName: 'T',
+        city: 'Bilinmiyor',
+        players: [],
+        managerId: '',
+        status: 'Beklemede',
+        tournamentId: tournament?.id ?? '',
+        logoUrl: '',
+      } as Team
+
+      return {
+        team,
+        played: row.played,
+        won: row.won,
+        draw: row.draw,
+        lost: row.lost,
+        gf: row.gf,
+        ga: row.ga,
+        pts: row.pts,
+        gd: row.gf - row.ga,
+      }
+    })
   }, [matches, safeTeams, tournament])
 
   const fixtureRows = useMemo(() => {

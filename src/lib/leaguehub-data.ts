@@ -1169,31 +1169,103 @@ export const calculatePlayerPerformance = (
   }
 }
 
+const isCompletedMatchStatus = (status?: string | null): boolean => {
+  if (!status) return false
+
+  const normalized = status.toString().trim().toLowerCase()
+  return normalized === 'completed' || normalized === 'bitti' || normalized === 'tamamlandi' || normalized === 'tamamlandı' || normalized === 'finished'
+}
+
+const getHeadToHeadTableSummary = (
+  teamId: string,
+  teamIds: ReadonlySet<string>,
+  matches: Array<{ homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number; status?: string | null }>,
+) => {
+  let points = 0
+  let goalsFor = 0
+  let goalsAgainst = 0
+
+  for (const match of matches) {
+    if (!isCompletedMatchStatus(match.status)) continue
+    const participatesInMatch =
+      (match.homeTeamId === teamId && teamIds.has(match.awayTeamId))
+      || (match.awayTeamId === teamId && teamIds.has(match.homeTeamId))
+
+    if (!participatesInMatch) continue
+
+    const teamGoals = match.homeTeamId === teamId ? match.homeScore : match.awayScore
+    const opponentGoals = match.homeTeamId === teamId ? match.awayScore : match.homeScore
+
+    goalsFor += teamGoals
+    goalsAgainst += opponentGoals
+
+    if (teamGoals > opponentGoals) {
+      points += 3
+    } else if (teamGoals === opponentGoals) {
+      points += 1
+    }
+  }
+
+  return {
+    points,
+    goalDifference: goalsFor - goalsAgainst,
+    goalsFor,
+  }
+}
+
+export const sortStandingsRows = <T extends { teamId: string; name?: string; pts: number; gf: number; ga: number }>(
+  rows: T[],
+  matches: Array<{ homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number; status?: string | null }> = [],
+): T[] => {
+  return [...rows].sort((left, right) => {
+    if (left.pts !== right.pts) return right.pts - left.pts
+
+    const tiedTeamIds = new Set(rows.filter((entry) => entry.pts === left.pts).map((entry) => entry.teamId))
+    if (tiedTeamIds.size > 1) {
+      const leftSummary = getHeadToHeadTableSummary(left.teamId, tiedTeamIds, matches)
+      const rightSummary = getHeadToHeadTableSummary(right.teamId, tiedTeamIds, matches)
+
+      if (leftSummary.points !== rightSummary.points) return rightSummary.points - leftSummary.points
+      if (leftSummary.goalDifference !== rightSummary.goalDifference) return rightSummary.goalDifference - leftSummary.goalDifference
+      if (leftSummary.goalsFor !== rightSummary.goalsFor) return rightSummary.goalsFor - leftSummary.goalsFor
+    }
+
+    const leftGoalDifference = left.gf - left.ga
+    const rightGoalDifference = right.gf - right.ga
+    if (leftGoalDifference !== rightGoalDifference) return rightGoalDifference - leftGoalDifference
+    if (left.gf !== right.gf) return right.gf - left.gf
+    if (left.ga !== right.ga) return left.ga - right.ga
+
+    return String(left.name ?? '').localeCompare(String(right.name ?? ''))
+  })
+}
+
 export const buildStandings = (
   teams: Team[],
   results: Array<{ teamId: string; played: number; won: number; draw: number; lost: number; gf: number; ga: number; pts?: number }>,
   scoring: { win: number; draw: number; loss: number } = DEFAULT_TOURNAMENT_SCORING,
+  matches: Array<{ homeTeamId: string; awayTeamId: string; homeScore: number; awayScore: number; status?: string | null }> = [],
 ) => {
   const map = new Map(results.map((result) => [result.teamId, result]))
 
-  return teams
-    .map((team) => {
-      const result = map.get(team.id) ?? { teamId: team.id, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, pts: 0 }
-      const computedPts = result.won * scoring.win + result.draw * scoring.draw + result.lost * scoring.loss
+  const standings = teams.map((team) => {
+    const result = map.get(team.id) ?? { teamId: team.id, played: 0, won: 0, draw: 0, lost: 0, gf: 0, ga: 0, pts: 0 }
+    const computedPts = result.won * scoring.win + result.draw * scoring.draw + result.lost * scoring.loss
 
-      return {
-        teamId: team.id,
-        name: team.name,
-        played: result.played,
-        won: result.won,
-        draw: result.draw,
-        lost: result.lost,
-        gf: result.gf,
-        ga: result.ga,
-        pts: Number.isFinite(computedPts) ? computedPts : 0,
-      }
-    })
-    .sort((first, second) => second.pts - first.pts || second.gf - first.gf)
+    return {
+      teamId: team.id,
+      name: team.name,
+      played: result.played,
+      won: result.won,
+      draw: result.draw,
+      lost: result.lost,
+      gf: result.gf,
+      ga: result.ga,
+      pts: Number.isFinite(computedPts) ? computedPts : 0,
+    }
+  })
+
+  return sortStandingsRows(standings, matches)
 }
 
 export const applyMatchEvent = (match: Match, event: MatchEvent): Match => {
